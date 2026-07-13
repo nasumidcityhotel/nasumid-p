@@ -18,39 +18,29 @@
     <!-- プレミアム・ヘッダー -->
     <header class="mr-header">
       <span class="mr-header-badge">NASU MIDCITY REVENUE ENGINE</span>
-      <h1 class="mr-header-title">市場相場 競合比較インサイト</h1>
+      <h1 class="mr-header-title">市場需要・競合価格分析</h1>
       
       <div class="mr-header-intro">
         <p>那須ミッドシティホテル 管理者様、お疲れ様です。</p>
         <p>
-          本画面は、那須塩原・西那須野エリアの競合他社の販売価格や空室状況を楽天トラベルのデータから自動集計し、
-          客室料金の最適化（値上げ・値下げ）の判断をサポートする分析パネルです。<br/>
-          カレンダーから日付を選択し、確認したい指標をクリックすることで、最適な価格判断の材料が一目で把握できます。
+          那須・那須塩原エリアの競合ホテルについて、指定した宿泊日の予約可否、販売価格、前回調査からの変化を確認します。<br/>
+          競合ホテルの実際の客室稼働率は公開されていないため、本システムではOTA上の予約状況を基に「市場ひっ迫度」を算出します。
         </p>
       </div>
 
-      <!-- 稼働率カードグリッド -->
-      <div class="mr-occupancy-grid">
+      <div class="mr-warning-note">
+        <i class="fas fa-info-circle"></i> 
+        市場ひっ迫度と競合満室率は、OTA上の予約可能状況を基に算出した市場指標です。各ホテルの実際の客室稼働率を示すものではありません。
+      </div>
 
-
-        <!-- 調査対象6施設 販売ステータスカード -->
-        <div class="mr-occ-card">
-          <div class="mr-occ-card-body">
-            <h3 class="mr-occ-title">
-              <span>📋</span> 調査対象6施設 販売状況
-            </h3>
-            <p class="mr-occ-desc">
-              リサーチしている競合・参考ホテル（計6軒）の満室状況
-            </p>
-            <div class="mr-status-badge blue">
-              🔍 楽天トラベルリアルタイム調査
-            </div>
-          </div>
-          <div class="mr-occ-value-area">
-            <div id="mr-competitor-occ-val" class="mr-occ-value">-軒</div>
-            <div id="mr-competitor-occ-label" class="mr-occ-label">満室 / 6軒中</div>
-          </div>
-        </div>
+      <!-- 市場ひっ迫度 5連カード -->
+      <div class="mr-summary-top-cards" id="mr-summary-top-cards">
+        <!-- JSで動的に表示 -->
+        <div class="mr-top-card"><div class="mr-top-card-title">市場ひっ迫度</div><div class="mr-top-card-value">-</div><div class="mr-top-card-desc">-</div></div>
+        <div class="mr-top-card"><div class="mr-top-card-title">競合満室率</div><div class="mr-top-card-value">-</div><div class="mr-top-card-desc">-</div></div>
+        <div class="mr-top-card"><div class="mr-top-card-title">前回比</div><div class="mr-top-card-value">-</div><div class="mr-top-card-desc">-</div></div>
+        <div class="mr-top-card"><div class="mr-top-card-title">競合最安値</div><div class="mr-top-card-value">-</div><div class="mr-top-card-desc">-</div></div>
+        <div class="mr-top-card"><div class="mr-top-card-title">料金判断</div><div class="mr-top-card-value" style="font-size:16px;">-</div><div class="mr-top-card-desc">-</div></div>
       </div>
 
       <!-- 調査条件 -->
@@ -106,6 +96,11 @@
           <span id="mr-result-date" class="mr-result-date">
             対象日: ----/--/--
           </span>
+        </div>
+
+        <div id="mr-chart-container" style="margin-bottom: 24px; padding: 16px; background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius-sm); display: none;">
+          <h4 style="font-size: 13px; margin-top: 0; margin-bottom: 12px;">市場ひっ迫度 推移</h4>
+          <canvas id="pressureChart" style="max-height: 200px; width: 100%;"></canvas>
         </div>
         
         <div class="mr-result-content" id="mr-result-content">

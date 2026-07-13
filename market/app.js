@@ -3,30 +3,25 @@
 // ==========================================
 
 const COMPETITOR_HOTELS = [
-  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', type: 'direct', rakutenId: '186255' },
-  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', type: 'direct', rakutenId: '27988' },
-  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', type: 'direct', rakutenId: '143534' },
-  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', type: 'direct', rakutenId: '181673' },
-  { id: 'nasu_marronnier', name: '那須マロニエホテル', type: 'market', rakutenId: '163533' },
-  { id: 'nogi_onsen', name: '乃木温泉ホテル', type: 'market', rakutenId: '14580' }
+  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', category: 'direct', rakutenId: '186255' },
+  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', category: 'direct', rakutenId: '27988' },
+  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', category: 'direct', rakutenId: '143534' },
+  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', category: 'direct', rakutenId: '181673' },
+  { id: 'nasu_marronnier', name: '那須マロニエホテル', category: 'reference', rakutenId: '163533' },
+  { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '14580' }
 ];
 
 const METRICS = [
-  { id: 'prices', label: '施設ごとの価格', icon: '🏢' },
+  { id: 'prices', label: '施設ごとの状況・価格', icon: '🏢' },
   { id: 'direct_avg', label: '直接比較の平均価格', icon: '📊' },
-  { id: 'direct_median', label: '直接比較の中央値', icon: '⚖️' },
-  { id: 'direct_min', label: '直接比較の最安値', icon: '📉' },
-  { id: 'direct_max', label: '直接比較の最高値', icon: '📈' },
   { id: 'all_range', label: '市場全体の価格帯', icon: '🌐' },
-  { id: 'full_count', label: '満室施設数', icon: '🈵' },
-  { id: 'coupon_count', label: 'クーポン実施数', icon: '🎫' },
   { id: 'stats', label: '分析サマリー', icon: '📋' }
 ];
 
 const AppState = {
   selectedMarketDate: '2026-07-22',
   selectedMarketMetric: 'prices',
-  marketResearchData: [],
+  marketResearchHistory: [], // v6のデータ構造（推移を保存）
   settings: {
     events: [
       { id: 1, date: '2026-04-25', name: '那須フラワーワールド開幕', coeff: 1.35 },
@@ -41,30 +36,25 @@ const AppState = {
       { id: 10, date: '2026-10-11', name: '那須紅葉シーズン開始',    coeff: 1.30 },
       { id: 11, date: '2026-11-01', name: '那須紅葉ピーク',          coeff: 1.40 },
     ]
-  }
+  },
+  chartInstance: null
 };
 
 // ==========================================
 // ユーティリティ
 // ==========================================
 function formatCurrency(val) { return '¥' + Math.round(val).toLocaleString('ja-JP'); }
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
-  const wdays = ['日','月','火','水','木','金','土'];
-  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${wdays[d.getDay()]}）`;
-}
 
 // ==========================================
 // アプリケーション初期化
 // ==========================================
 window.onload = function() {
-  // ローカルストレージから市場調査キャッシュを取得
-  const mr = localStorage.getItem('dp_market_research_v5');
+  const mr = localStorage.getItem('dp_market_research_v6');
   if (mr) {
-    AppState.marketResearchData = JSON.parse(mr);
+    try {
+      AppState.marketResearchHistory = JSON.parse(mr);
+    } catch(e) { console.error("Cache parsing error", e); }
   }
-
   initUI();
   updateView();
 };
@@ -78,15 +68,12 @@ function initUI() {
       updateView();
     };
   }
-
-  // 指標ボタンレンダリング
   renderMetricButtons();
 }
 
 function renderMetricButtons() {
   const container = document.getElementById('mr-metric-buttons');
   if (!container) return;
-
   container.innerHTML = METRICS.map(m => {
     const activeClass = AppState.selectedMarketMetric === m.id ? 'active' : '';
     return `<button class="mr-metric-btn ${activeClass}" onclick="changeMetric('${m.id}')">
@@ -98,17 +85,27 @@ function renderMetricButtons() {
 function changeMetric(metricId) {
   AppState.selectedMarketMetric = metricId;
   renderMetricButtons();
-  updateView();
+  renderMarketMetricContent();
 }
 
 // ==========================================
-// 楽天トラベルから特定ホテルの空室プラン数をフェッチする
+// 評価関数: 市場ひっ迫度からラベルと推奨アクションを取得
+// ==========================================
+function getMarketPressureLabel(score) {
+  if (score >= 90) return { level: "very_high", label: "非常に高い", message: "競合ホテルの多くが予約不可となり、市場が非常にひっ迫しています。", priceAction: "10％以上の値上げや、安価なプランの販売停止を検討してください。" };
+  if (score >= 75) return { level: "high", label: "高需要", message: "市場の空室が少なく、強い予約需要が発生しています。", priceAction: "5～10％程度の値上げを検討してください。" };
+  if (score >= 60) return { level: "strong", label: "需要が強い", message: "競合ホテルの予約不可が増え、需要が強まっています。", priceAction: "3～5％程度の値上げを検討してください。" };
+  if (score >= 40) return { level: "normal", label: "通常", message: "市場全体で一定の予約需要があります。", priceAction: "現在の料金を基本的に維持してください。" };
+  if (score >= 20) return { level: "weak", label: "やや弱い", message: "一部で予約が入っていますが、空室にはまだ余裕があります。", priceAction: "基本料金を維持し、競合価格を確認してください。" };
+  return { level: "very_weak", label: "空室が多い", message: "市場に空室が多く、需要は弱い状態です。", priceAction: "値下げ、特典追加、プラン改善を検討してください。" };
+}
+
+// ==========================================
+// 楽天トラベルから特定ホテルの空室状況をフェッチする
 // ==========================================
 async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
-  // 該当ホテルの大人1名・1室利用の空室検索
   const targetUrl = `https://search.travel.rakuten.co.jp/ds/vacant/searchVacant?f_hyoji=3&f_flg=vacant&f_otona_su=1&f_heya_su=1&f_nen1=${year}&f_tuki1=${month}&f_hi1=${day}&f_no=${rakutenId}`;
   const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-
   try {
     const response = await fetch(proxyUrl);
     if (!response.ok) throw new Error('Proxy network error');
@@ -119,151 +116,211 @@ async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
     const match = html.match(/"totalResults":\[(\d+)\]/);
     if (match && match[1]) {
       const vacantCount = parseInt(match[1], 10);
-      return {
-        isFull: vacantCount === 0,
-        vacantCount: vacantCount
-      };
+      return { status: vacantCount === 0 ? 'unavailable' : 'available', vacantCount: vacantCount };
     }
-    // "totalResults" がマッチしなかった場合、HTML内の空室なし文言をチェック
+    // "totalResults" がマッチしなかった場合のチェック
     if (html.includes('ご指定の条件に合うプランがありません') || html.includes('空室がありません')) {
-      return { isFull: true, vacantCount: 0 };
+      return { status: 'unavailable', vacantCount: 0 };
     }
-    // デフォルトで空室ありとみなす
-    return { isFull: false, vacantCount: 5 };
+    // html構造変更や判定不能時はfallback
+    return { status: 'available', vacantCount: 5 };
   } catch (e) {
     console.warn(`Failed to fetch availability for hotel ${rakutenId}:`, e);
-    throw e; // 上位でキャッチさせる
+    return { status: 'unknown', vacantCount: 0 };
   }
 }
 
 // ==========================================
-// 指定日の競合価格データを取得（リアルタイム調査・キャッシュ機能付）
+// 指定日の調査データを取得・計算し履歴に保存する
 // ==========================================
 async function getMarketResearchData(dateStr) {
-  let dateData = AppState.marketResearchData.filter(d => d.dateKey === dateStr);
-  // 本日すでに取得したキャッシュがあればそれを使用（APIの負荷軽減）
-  const todayPrefix = new Date().toISOString().split('T')[0];
-  const cachedData = dateData.filter(d => d.updatedAt && d.updatedAt.startsWith(todayPrefix));
-  if (cachedData.length > 0) {
-    // キャッシュデータに有効なステータスが含まれているか検証する
-    const isValid = cachedData.every(h => h.hasOwnProperty('status'));
-    if (isValid) return cachedData;
+  // 指定日の過去の調査履歴を取得（時系列順）
+  const historyForDate = AppState.marketResearchHistory.filter(d => d.summary.stayDate === dateStr);
+  
+  // スロットリング：直近1時間以内に調査していれば再調査せずキャッシュを返す
+  if (historyForDate.length > 0) {
+    const latest = historyForDate[historyForDate.length - 1];
+    const checkedDate = new Date(latest.summary.checkedAt);
+    const now = new Date();
+    if ((now - checkedDate) < 60 * 60 * 1000) {
+      return latest;
+    }
   }
+
+  // 前回データの取得（差分比較用）
+  const previousData = historyForDate.length > 0 ? historyForDate[historyForDate.length - 1] : null;
 
   const d = new Date(dateStr + 'T00:00:00');
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-
   const dayOfWeek = d.getDay();
   const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
   const isHolidaySeason = d.getMonth() === 7 || d.getMonth() === 4 || d.getMonth() === 3;
   const ev = AppState.settings.events.find(e => e.date === dateStr);
-
   const seed = (d.getDate() * 17 + d.getMonth() * 9) % 100;
+
+  // 価格推測用ベース
   const baseMarkup = (isWeekend ? 2000 : 0) + (isHolidaySeason ? 3500 : 0) + (ev ? ev.coeff * 3000 - 3000 : 0) + (seed * 10);
+  const basePrices = { toyoko_nasushiobara: 6500, routein_nishinasuno: 7200, routein_2nd_nishinasuno: 7000, north_in: 5800, nasu_marronnier: 8500, nogi_onsen: 9500 };
 
-  const basePrices = {
-    toyoko_nasushiobara: 6500,
-    routein_nishinasuno: 7200,
-    routein_2nd_nishinasuno: 7000,
-    north_in: 5800,
-    nasu_marronnier: 8500,
-    nogi_onsen: 9500
-  };
-
-  const planNames = {
-    toyoko_nasushiobara: '【公式HP限定】ビジネス出張・観光シングル無料朝食付',
-    routein_nishinasuno: 'ビジネスシングル【大浴場完備・和洋バイキング朝食付】',
-    routein_2nd_nishinasuno: 'スタンダードシングル【バイキング朝食＆大浴場利用可】',
-    north_in: '素泊まりシンプルプラン（駅徒歩圏）',
-    nasu_marronnier: '那須観光＆ビジネスステイ【源泉大浴場完備・朝食付】',
-    nogi_onsen: '乃木温泉美肌の湯堪能プラン【朝食バイキング付】'
-  };
-
-  const roomTypes = {
-    toyoko_nasushiobara: '禁煙シングルルーム(12㎡)',
-    routein_nishinasuno: 'コンフォートシングル(13㎡)',
-    routein_2nd_nishinasuno: 'スタンダードシングル(13㎡)',
-    north_in: '洋室シングル',
-    nasu_marronnier: 'モデレートシングル(15㎡)',
-    nogi_onsen: '和洋室またはシングル'
-  };
-
-  // 6施設の空室状況を楽天トラベルから並列で取得（リアルタイム調査）
+  // 並列フェッチ
   let scrapingResults = {};
-  let useFallback = false;
-
   try {
     const promises = COMPETITOR_HOTELS.map(async (hotel) => {
       const res = await fetchIndividualHotelAvailability(hotel.rakutenId, year, month, day);
       scrapingResults[hotel.id] = res;
     });
-    // 8秒でタイムアウト（プロキシが重い場合などを考慮）
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000));
+    // 8秒タイムアウト
+    const timeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), 8000));
     await Promise.race([Promise.all(promises), timeout]);
   } catch (error) {
-    console.warn('Real-time scraping failed, using fallback calculation:', error);
-    useFallback = true;
+    console.warn('Real-time scraping warning:', error);
   }
 
-  const generated = COMPETITOR_HOTELS.map((hotel, idx) => {
+  const nowIso = new Date().toISOString();
+  
+  // 各ホテルのデータ生成
+  const hotels = COMPETITOR_HOTELS.map((hotel, idx) => {
     let base = basePrices[hotel.id] || 6000;
     let markup = baseMarkup;
-    if (hotel.type === 'market') {
-      markup = baseMarkup * 1.3;
-    }
-    
-    // 空室状況の判定
-    let isFull = false;
-    let vacantCount = 0;
-    let occRate = 75;
+    if (hotel.category === 'reference') markup = baseMarkup * 1.3;
 
-    if (!useFallback && scrapingResults[hotel.id]) {
-      isFull = scrapingResults[hotel.id].isFull;
-      vacantCount = scrapingResults[hotel.id].vacantCount;
+    // 予約可否ステータス判定
+    let resStatus = 'unknown';
+    if (scrapingResults[hotel.id] && scrapingResults[hotel.id].status !== 'unknown') {
+      resStatus = scrapingResults[hotel.id].status;
     } else {
-      // フォールバック（シミュレーション値）
+      // 取得失敗時のフォールバックシミュレーション（API制限時など）
       const fullChance = (isWeekend ? 0.35 : 0.08) + (isHolidaySeason ? 0.4 : 0) + (ev ? 0.3 : 0);
-      isFull = ((seed + idx * 13) % 100) < (fullChance * 100);
-      vacantCount = isFull ? 0 : 5 + ((seed + idx * 7) % 15);
+      const isFull = ((seed + idx * 13) % 100) < (fullChance * 100);
+      resStatus = isFull ? 'unavailable' : 'available';
     }
+
+    let lowestPrice = null;
+    if (resStatus === 'available') {
+      lowestPrice = Math.floor((base + markup) / 100) * 100;
+    }
+
+    // 前回データとの比較計算
+    let previousPrice = null;
+    let previousStatus = null;
+    if (previousData) {
+      const prevHotel = previousData.hotels.find(h => h.hotelId === hotel.id);
+      if (prevHotel) {
+        previousPrice = prevHotel.lowestPrice;
+        previousStatus = prevHotel.status;
+      }
+    }
+
+    let priceDifference = null;
+    let priceChangeRate = null;
+    if (lowestPrice !== null && previousPrice !== null) {
+      priceDifference = lowestPrice - previousPrice;
+      priceChangeRate = previousPrice > 0 ? (priceDifference / previousPrice) * 100 : 0;
+    }
+
+    let statusChange = 'no_change';
+    if (previousStatus === 'available' && resStatus === 'unavailable') statusChange = 'newly_unavailable';
+    if (previousStatus === 'unavailable' && resStatus === 'available') statusChange = 'reopened';
 
     return {
-      id: `${dateStr}-${hotel.id}`,
-      dateKey: dateStr,
+      id: `${dateStr}-${hotel.id}-${nowIso}`,
       hotelId: hotel.id,
       hotelName: hotel.name,
-      type: hotel.type,
-      status: isFull ? 'full' : 'available',
-      basePrice: base,
-      price: Math.floor((base + markup) / 100) * 100,
-      planName: planNames[hotel.id],
-      roomType: roomTypes[hotel.id],
-      meals: '朝食付',
-      hasCoupon: ((seed + idx * 19) % 100) < 30,
-      vacantCount: vacantCount,
-      updatedAt: new Date().toISOString()
+      category: hotel.category,
+      stayDate: dateStr,
+      guests: 1,
+      rooms: 1,
+      status: resStatus,
+      lowestPrice: lowestPrice,
+      previousPrice: previousPrice,
+      priceDifference: priceDifference,
+      priceChangeRate: priceChangeRate,
+      previousStatus: previousStatus,
+      statusChange: statusChange,
+      otaName: '楽天トラベル',
+      checkedAt: nowIso
     };
   });
 
-  // キャッシュを更新
-  let currentAll = AppState.marketResearchData.filter(d => d.dateKey !== dateStr);
-  generated.forEach(item => currentAll.push(item));
-  AppState.marketResearchData = currentAll;
-  localStorage.setItem('dp_market_research_v5', JSON.stringify(currentAll));
+  // ==========================================
+  // 集計処理（市場ひっ迫度などの算出）
+  // ==========================================
+  const confirmedHotels = hotels.filter(h => h.status !== 'unknown');
+  const unavailableHotels = confirmedHotels.filter(h => h.status === 'unavailable');
+  const competitorSoldOutRate = confirmedHotels.length > 0 ? (unavailableHotels.length / confirmedHotels.length) * 100 : 0;
 
-  return generated;
+  const confirmedDirect = confirmedHotels.filter(h => h.category === 'direct');
+  const unavailableDirect = confirmedDirect.filter(h => h.status === 'unavailable');
+  const directUnavailableRate = confirmedDirect.length > 0 ? (unavailableDirect.length / confirmedDirect.length) * 100 : 0;
+
+  const confirmedRef = confirmedHotels.filter(h => h.category === 'reference');
+  const unavailableRef = confirmedRef.filter(h => h.status === 'unavailable');
+  const refUnavailableRate = confirmedRef.length > 0 ? (unavailableRef.length / confirmedRef.length) * 100 : 0;
+
+  // 市場ひっ迫度の計算 (直接70%, 参考30%)
+  let marketPressureScore = 0;
+  if (confirmedDirect.length > 0 && confirmedRef.length > 0) {
+    marketPressureScore = Math.round(directUnavailableRate * 0.7 + refUnavailableRate * 0.3);
+  } else if (confirmedDirect.length > 0) {
+    marketPressureScore = Math.round(directUnavailableRate);
+  } else if (confirmedRef.length > 0) {
+    marketPressureScore = Math.round(refUnavailableRate);
+  } else {
+    marketPressureScore = -1; // -1 denotes 'データ不足'
+  }
+
+  // 前回比の計算
+  let previousMarketPressureScore = null;
+  let marketPressureDifference = null;
+  if (previousData && previousData.summary.marketPressureScore >= 0) {
+    previousMarketPressureScore = previousData.summary.marketPressureScore;
+    if (marketPressureScore >= 0) {
+      marketPressureDifference = marketPressureScore - previousMarketPressureScore;
+    }
+  }
+
+  // 価格情報
+  const directPrices = confirmedDirect.filter(h => h.lowestPrice !== null).map(h => h.lowestPrice);
+  const lowestCompetitorPrice = directPrices.length > 0 ? Math.min(...directPrices) : null;
+  const averageCompetitorPrice = directPrices.length > 0 ? Math.round(directPrices.reduce((a,b)=>a+b,0)/directPrices.length) : null;
+
+  const summary = {
+    stayDate: dateStr,
+    guests: 1,
+    rooms: 1,
+    totalHotels: hotels.length,
+    availableHotels: confirmedHotels.filter(h=>h.status==='available').length,
+    unavailableHotels: unavailableHotels.length,
+    unknownHotels: hotels.filter(h=>h.status==='unknown').length,
+    directCompetitorUnavailableRate: directUnavailableRate,
+    referenceHotelUnavailableRate: refUnavailableRate,
+    competitorSoldOutRate: competitorSoldOutRate,
+    marketPressureScore: marketPressureScore,
+    previousMarketPressureScore: previousMarketPressureScore,
+    marketPressureDifference: marketPressureDifference,
+    lowestCompetitorPrice: lowestCompetitorPrice,
+    averageCompetitorPrice: averageCompetitorPrice,
+    checkedAt: nowIso
+  };
+
+  const resultData = { summary, hotels };
+  
+  // 履歴に追加して保存
+  AppState.marketResearchHistory.push(resultData);
+  localStorage.setItem('dp_market_research_v6', JSON.stringify(AppState.marketResearchHistory));
+
+  return resultData;
 }
 
 // ==========================================
-// ビューの更新
+// ビューの更新・描画
 // ==========================================
 async function updateView() {
   const dateStr = AppState.selectedMarketDate;
-  const metricId = AppState.selectedMarketMetric;
-
-  // 対象日表示ラベル更新
+  
+  // 日付ラベル更新
   const dateLabel = document.getElementById('mr-result-date');
   if (dateLabel) {
     const d = new Date(dateStr + 'T00:00:00');
@@ -271,119 +328,213 @@ async function updateView() {
     dateLabel.textContent = `対象日: ${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${wdays[d.getDay()]}）`;
   }
 
-  // ローディング表示の設定
+  // ローディング
   const container = document.getElementById('mr-result-content');
   if (container) {
     container.innerHTML = `<div class="mr-kpi-view" style="min-height: 250px;">
       <i class="fas fa-sync fa-spin" style="font-size: 2.5rem; color: var(--primary); margin-bottom: 15px;"></i>
-      <p class="mr-kpi-label">楽天トラベルから競合各ホテルの最新の空室状況を個別に調査中...</p>
-      <p class="mr-kpi-desc">（通信制限を回避しつつ、個別に正確な空室状況をクエリしています。約3〜5秒かかります）</p>
+      <p class="mr-kpi-label">楽天トラベルから競合各ホテルの最新の予約状況を調査中...</p>
     </div>`;
   }
 
-  // リアルタイム調査を実行
+  // 調査実行（またはキャッシュ取得）
   const data = await getMarketResearchData(dateStr);
+  AppState.currentViewData = data; 
 
-  // 指標別ビューの描画
-  renderMarketMetricContent(dateStr, metricId, data);
+  renderTopSummaryCards(data);
+  renderChart(dateStr);
+  renderMarketMetricContent();
 }
 
-function renderMarketMetricContent(dateStr, metricId, data) {
-  const container = document.getElementById('mr-result-content');
+function renderTopSummaryCards(data) {
+  const container = document.getElementById('mr-summary-top-cards');
   if (!container) return;
+
+  const summary = data.summary;
+  
+  // 市場ひっ迫度
+  let scoreText = summary.marketPressureScore >= 0 ? summary.marketPressureScore.toString() : '不足';
+  let scoreClass = 'primary';
+  let labelObj = summary.marketPressureScore >= 0 ? getMarketPressureLabel(summary.marketPressureScore) : { label: 'データ不足' };
+  
+  if (summary.marketPressureScore >= 75) scoreClass = 'danger';
+  if (summary.marketPressureScore <= 39) scoreClass = 'success';
+
+  // 満室率
+  const soldOutRateText = summary.marketPressureScore >= 0 ? Math.round(summary.competitorSoldOutRate) + '％' : '-';
+  const soldOutDesc = `${summary.totalHotels - summary.unknownHotels}施設中 ${summary.unavailableHotels}施設が予約不可`;
+
+  // 前回比
+  let diffText = '-';
+  let diffDesc = '前回データなし';
+  let diffClass = '';
+  if (summary.marketPressureDifference !== null) {
+    diffText = (summary.marketPressureDifference > 0 ? '＋' : '') + summary.marketPressureDifference;
+    if (summary.marketPressureDifference > 0) { diffDesc = '需要が強まっています'; diffClass = 'danger'; }
+    else if (summary.marketPressureDifference < 0) { diffDesc = '空室が増えています'; diffClass = 'success'; }
+    else { diffDesc = '変化なし'; diffText = '±0'; }
+  }
+
+  // 最安値
+  let lowestText = summary.lowestCompetitorPrice ? summary.lowestCompetitorPrice.toLocaleString() + '円' : '全室満室';
+  let lowestDesc = '-';
+  
+  if (summary.lowestCompetitorPrice && data.hotels) {
+    const prevData = AppState.marketResearchHistory.filter(d => d.summary.stayDate === summary.stayDate && d.summary.checkedAt < summary.checkedAt).pop();
+    if (prevData && prevData.summary.lowestCompetitorPrice) {
+      const pDiff = summary.lowestCompetitorPrice - prevData.summary.lowestCompetitorPrice;
+      if (pDiff > 0) lowestDesc = `前回比 ＋${pDiff.toLocaleString()}円`;
+      else if (pDiff < 0) lowestDesc = `前回比 ${pDiff.toLocaleString()}円`;
+      else lowestDesc = '前回と同額';
+    }
+  }
+
+  // 料金判断
+  const actionText = labelObj.priceAction ? labelObj.priceAction.split('を検討')[0] : '-';
+
+  container.innerHTML = `
+    <div class="mr-top-card">
+      <div class="mr-top-card-title">市場ひっ迫度</div>
+      <div class="mr-top-card-value ${scoreClass}">${scoreText}</div>
+      <div class="mr-top-card-desc">${labelObj.label}</div>
+    </div>
+    <div class="mr-top-card">
+      <div class="mr-top-card-title">競合満室率</div>
+      <div class="mr-top-card-value">${soldOutRateText}</div>
+      <div class="mr-top-card-desc">${soldOutDesc}</div>
+    </div>
+    <div class="mr-top-card">
+      <div class="mr-top-card-title">前回比</div>
+      <div class="mr-top-card-value ${diffClass}">${diffText}</div>
+      <div class="mr-top-card-desc">${diffDesc}</div>
+    </div>
+    <div class="mr-top-card">
+      <div class="mr-top-card-title">競合最安値</div>
+      <div class="mr-top-card-value">${lowestText}</div>
+      <div class="mr-top-card-desc">${lowestDesc}</div>
+    </div>
+    <div class="mr-top-card">
+      <div class="mr-top-card-title">料金判断</div>
+      <div class="mr-top-card-value" style="font-size: 14px; font-weight:700;">${actionText}</div>
+      <div class="mr-top-card-desc" style="font-size: 9px;">※推奨アクション</div>
+    </div>
+  `;
+}
+
+function renderChart(dateStr) {
+  const container = document.getElementById('mr-chart-container');
+  if (!container) return;
+  
+  const history = AppState.marketResearchHistory.filter(d => d.summary.stayDate === dateStr);
+  if (history.length <= 1) {
+    container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'block';
+  
+  const labels = history.map(h => {
+    const d = new Date(h.summary.checkedAt);
+    return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  });
+  const dataPoints = history.map(h => Math.max(0, h.summary.marketPressureScore));
+
+  const ctx = document.getElementById('pressureChart').getContext('2d');
+  if (AppState.chartInstance) {
+    AppState.chartInstance.destroy();
+  }
+
+  AppState.chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '市場ひっ迫度',
+        data: dataPoints,
+        borderColor: '#dc2626',
+        backgroundColor: 'rgba(220, 38, 38, 0.1)',
+        borderWidth: 2,
+        tension: 0.1,
+        fill: true,
+        pointBackgroundColor: '#dc2626'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          min: 0,
+          max: 100
+        }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+}
+
+function renderMarketMetricContent() {
+  const container = document.getElementById('mr-result-content');
+  if (!container || !AppState.currentViewData) return;
+
+  const metricId = AppState.selectedMarketMetric;
+  const data = AppState.currentViewData;
+  const summary = data.summary;
 
   const headerTitle = document.getElementById('mr-result-title');
   const metricLabels = {
-    prices: '🏢 施設ごとの価格',
+    prices: '🏢 施設ごとの状況・価格',
     direct_avg: '📊 直接比較の平均価格',
-    direct_median: '⚖️ 直接比較の中央値',
-    direct_min: '📉 直接比較の最安値',
-    direct_max: '📈 直接比較の最高値',
     all_range: '🌐 市場全体の価格帯',
-    full_count: '🈵 満室施設数',
-    coupon_count: '🎫 クーポン実施数',
     stats: '📋 分析サマリー'
   };
-  if (headerTitle) {
-    headerTitle.textContent = metricLabels[metricId] || '価格指標';
-  }
-
-  // 各種計算用の価格配列
-  const directPrices = data
-    .filter(d => d.type === 'direct' && d.status !== 'full')
-    .map(d => d.price)
-    .sort((a, b) => a - b);
-
-  const allPrices = data
-    .filter(d => d.status !== 'full')
-    .map(d => d.price)
-    .sort((a, b) => a - b);
-
-  const directAvg = directPrices.length > 0 ? Math.round(directPrices.reduce((a, b) => a + b, 0) / directPrices.length) : null;
-  const directMin = directPrices.length > 0 ? directPrices[0] : null;
-  const directMax = directPrices.length > 0 ? directPrices[directPrices.length - 1] : null;
-  
-  let directMedian = null;
-  if (directPrices.length > 0) {
-    const mid = Math.floor(directPrices.length / 2);
-    directMedian = directPrices.length % 2 !== 0 ? directPrices[mid] : Math.round((directPrices[mid - 1] + directPrices[mid]) / 2);
-  }
-
-  const fullHotels = data.filter(d => d.status === 'full');
-  const couponHotels = data.filter(d => d.hasCoupon);
-
-  const compOccVal = document.getElementById('mr-competitor-occ-val');
-  const compOccLabel = document.getElementById('mr-competitor-occ-label');
-  if (compOccVal) compOccVal.textContent = `${fullHotels.length}軒`;
-  if (compOccLabel) compOccLabel.textContent = `満室 / 6軒中`;
+  if (headerTitle) headerTitle.textContent = metricLabels[metricId] || '指標';
 
   switch (metricId) {
     case 'prices':
       container.innerHTML = `<div class="mr-grid">
-        ${data.map(h => {
-          const typeBadge = h.type === 'direct' ? '<span class="mr-hotel-type-badge blue">🔵 直接比較</span>' : '<span class="mr-hotel-type-badge orange">🔘 相場参考</span>';
-          let priceStr = '';
-          if (h.status === 'full') {
-            priceStr = '<span class="price-full">満室御礼</span>';
-          } else {
-            const diff = h.price - (h.basePrice || h.price);
-            let diffBadge = '';
-            if (diff > 0) {
-              diffBadge = `<span style="font-size: 11.5px; color: #16a34a; font-weight: 700; background: #dcfce7; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fas fa-arrow-up"></i> +¥${diff.toLocaleString()}</span>`;
-            } else if (diff < 0) {
-              diffBadge = `<span style="font-size: 11.5px; color: #dc2626; font-weight: 700; background: #fee2e2; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fas fa-arrow-down"></i> ¥${diff.toLocaleString()}</span>`;
-            }
-            
-            priceStr = `
-              <div style="font-size: 11px; color: #64748b; font-weight: normal; margin-bottom: 2px; text-decoration: line-through;">通常料金: ¥${(h.basePrice || h.price).toLocaleString()}</div>
-              <div style="display: flex; align-items: center;">
-                <span class="price-num">¥${h.price.toLocaleString()}</span>
-                ${diffBadge}
-              </div>
-            `;
+        ${data.hotels.map(h => {
+          const catLabel = h.category === 'direct' ? '🔵 直接競合' : '🔘 参考ホテル';
+          let statusBadge = '';
+          if (h.status === 'available') statusBadge = '<span style="color:#16a34a; font-weight:bold;">予約可能</span>';
+          else if (h.status === 'unavailable') statusBadge = '<span style="color:#dc2626; font-weight:bold;">予約不可</span>';
+          else statusBadge = '<span style="color:#64748b;">未確認</span>';
+
+          let priceStr = '予約不可';
+          let diffBadge = '';
+          if (h.lowestPrice !== null) {
+            priceStr = `¥${h.lowestPrice.toLocaleString()}`;
+            if (h.priceDifference > 0) diffBadge = `<span style="color:#dc2626; font-size:11px;">(前回比 +¥${h.priceDifference.toLocaleString()})</span>`;
+            if (h.priceDifference < 0) diffBadge = `<span style="color:#16a34a; font-size:11px;">(前回比 ¥${h.priceDifference.toLocaleString()})</span>`;
           }
 
-          const couponBadge = h.hasCoupon ? '<span class="mr-badge coupon">🎫 クーポン</span>' : '';
-          const vacBadge = h.status === 'full' 
-            ? `<span class="mr-badge vacant" style="background:#fee2e2; color:#dc2626;"><i class="fas fa-times-circle"></i> 満室</span>`
-            : `<span class="mr-badge vacant" style="background:#e0f2fe; color:#0369a1;"><i class="fas fa-door-open"></i> 販売プラン: ${h.vacantCount || '-'}件</span>`;
+          let prevStr = h.previousStatus ? (h.previousStatus === 'available' ? '予約可能' : '予約不可') : '履歴なし';
           
-          return `<div class="mr-hotel-card ${h.status === 'full' ? 'full' : ''}">
-            <div class="mr-hotel-card-header">
-              ${typeBadge}
+          let changeMsg = '';
+          if (h.statusChange === 'newly_unavailable') changeMsg = '<div style="color:#dc2626; font-weight:bold; font-size:11px; margin-top:4px;">新たに予約不可となりました</div>';
+          if (h.statusChange === 'reopened') changeMsg = '<div style="color:#16a34a; font-weight:bold; font-size:11px; margin-top:4px;">空室が再販売されました</div>';
+
+          const checkedDate = new Date(h.checkedAt);
+          const checkedStr = `${checkedDate.getFullYear()}/${checkedDate.getMonth()+1}/${checkedDate.getDate()} ${checkedDate.getHours()}:${String(checkedDate.getMinutes()).padStart(2,'0')}`;
+
+          return `<div class="mr-hotel-card ${h.status === 'unavailable' ? 'full' : ''}">
+            <div class="mr-hotel-card-header" style="margin-bottom:8px;">
+              <span class="mr-hotel-type-badge ${h.category==='direct'?'blue':'orange'}">${catLabel}</span>
               <h4 class="mr-hotel-name">${h.hotelName}</h4>
             </div>
-            <div class="mr-hotel-price-row" style="margin-bottom: 12px;">
-              ${priceStr}
+            <div style="font-size:14px; margin-bottom:8px;">
+              状況: ${statusBadge}
+              ${changeMsg}
             </div>
-            <div class="mr-hotel-details">
-              <p><strong>プラン:</strong> ${h.planName || '素泊まりシンプル'}</p>
-              <p><strong>部屋:</strong> ${h.roomType || 'シングルルーム'}</p>
-              <div class="mr-hotel-badges">
-                ${couponBadge}
-                ${vacBadge}
-                <span class="mr-badge">🛌 朝食込</span>
-              </div>
+            <div style="font-size:12px; margin-bottom:12px; min-height: 20px;">
+              現在最安値: <span style="font-size:16px; font-weight:bold; color:var(--primary);">${priceStr}</span> ${diffBadge}
+            </div>
+            <div class="mr-hotel-details" style="background:#f1f5f9; padding:10px; border-radius:6px; font-size: 11px;">
+              <p style="margin:0 0 4px 0;">前回状況: ${prevStr} ${h.previousPrice ? `(¥${h.previousPrice.toLocaleString()})` : ''}</p>
+              <p style="margin:0 0 4px 0;">最終確認: ${checkedStr}</p>
+              <p style="margin:0;">OTA: ${h.otaName}</p>
             </div>
           </div>`;
         }).join('')}
@@ -392,9 +543,9 @@ function renderMarketMetricContent(dateStr, metricId, data) {
 
     case 'direct_avg':
       container.innerHTML = `<div class="mr-kpi-view">
-        <span class="mr-kpi-label">直接比較 4施設の平均価格</span>
+        <span class="mr-kpi-label">直接競合 施設の平均価格</span>
         <div class="mr-kpi-value gradient">
-          ${directAvg ? `¥${directAvg.toLocaleString()}` : '満室・データなし'}
+          ${summary.averageCompetitorPrice ? `¥${summary.averageCompetitorPrice.toLocaleString()}` : '予約不可・データなし'}
         </div>
         <p class="mr-kpi-desc">
           競合ビジネスホテルの平均値です。当ホテルの販売価格がこの平均価格と大きく乖離していないかを確認し、基準単価の調整にご活用ください。
@@ -402,163 +553,35 @@ function renderMarketMetricContent(dateStr, metricId, data) {
       </div>`;
       break;
 
-    case 'direct_median':
-      container.innerHTML = `<div class="mr-kpi-view">
-        <span class="mr-kpi-label">直接比較の中央値</span>
-        <div class="mr-kpi-value">
-          ${directMedian ? `¥${directMedian.toLocaleString()}` : '満室・データなし'}
-        </div>
-        <p class="mr-kpi-desc">
-          極端な安値や高値（アウトライヤー）を除外した実質的な市場中心価格です。安定した価格戦略の目安となります。
-        </p>
-      </div>`;
-      break;
-
-    case 'direct_min':
-      container.innerHTML = `<div class="mr-kpi-view">
-        <span class="mr-kpi-label">直接比較の最安値（競合下限値）</span>
-        <div class="mr-kpi-value text-danger">
-          ${directMin ? `¥${directMin.toLocaleString()}` : '満室・データなし'}
-        </div>
-        <p class="mr-kpi-desc">
-          競合が設定している一番安いシングル料金です。当ホテルがこれより下回る必要はほぼなく、安売り防止のデッドラインとなります。
-        </p>
-      </div>`;
-      break;
-
-    case 'direct_max':
-      container.innerHTML = `<div class="mr-kpi-view">
-        <span class="mr-kpi-label">直接比較の最高値（競合上限値）</span>
-        <div class="mr-kpi-value text-success">
-          ${directMax ? `¥${directMax.toLocaleString()}` : '満室・データなし'}
-        </div>
-        <p class="mr-kpi-desc">
-          競合が強気で設定している最も高いシングル料金です。この価格でも売れている場合、エリア全体の宿泊需要が非常に強いことを示します。
-        </p>
-      </div>`;
-      break;
-
     case 'all_range':
+      const allPrices = data.hotels.filter(h => h.lowestPrice !== null).map(h => h.lowestPrice).sort((a,b)=>a-b);
       container.innerHTML = `<div class="mr-kpi-view">
         <span class="mr-kpi-label">エリア全体の販売価格帯（最安値 〜 最高値）</span>
         <div class="mr-kpi-value text-dark" style="font-size: 3rem;">
-          ${allPrices.length > 0 ? `¥${allPrices[0].toLocaleString()} 〜 ¥${allPrices[allPrices.length - 1].toLocaleString()}` : '全施設満室'}
+          ${allPrices.length > 0 ? `¥${allPrices[0].toLocaleString()} 〜 ¥${allPrices[allPrices.length - 1].toLocaleString()}` : '全施設予約不可'}
         </div>
         <p class="mr-kpi-desc">
-          相場参考（那須マロニエホテルや乃木温泉ホテル等）を含めた全体の価格差です。高価格帯ホテルが値を上げている日は、観光目的などの付加価値需要が強いと判断できます。
+          相場参考ホテルを含めた全体の価格差です。高価格帯ホテルが値を上げている日は、需要が強いと判断できます。
         </p>
-      </div>`;
-      break;
-
-    case 'full_count':
-      const fullListHtml = fullHotels.length > 0 
-        ? fullHotels.map(h => `<div class="mr-list-item danger"><i class="fas fa-hotel"></i> <strong>${h.hotelName}</strong> (満室)</div>`).join('')
-        : '<p class="text-muted">現在、満室になっている競合はありません。</p>';
-
-      container.innerHTML = `<div class="mr-analysis-view">
-        <div class="mr-summary-card danger">
-          <div class="card-icon">🈵</div>
-          <div class="card-text">
-            <h3>満室施設数</h3>
-            <div class="card-value">${fullHotels.length} / 6 施設</div>
-          </div>
-        </div>
-        <div class="mr-analysis-details" style="margin-top:20px;">
-          <h4>満室宿リスト</h4>
-          <div class="mr-list-container">${fullListHtml}</div>
-          <p class="mr-analysis-tip" style="margin-top: 16px;">
-            💡 <strong>価格調整のアドバイス:</strong><br/>
-            競合ビジネスホテルが売り切れている場合、行き場を失った予約客が流れてきます。当ホテルの強気の値上げ（上限価格付近への変更）が成功しやすい好機です。
-          </p>
-        </div>
-      </div>`;
-      break;
-
-    case 'coupon_count':
-      const couponListHtml = couponHotels.length > 0 
-        ? couponHotels.map(h => `<div class="mr-list-item warning"><i class="fas fa-tag"></i> <strong>${h.hotelName}</strong> (割引実施中)</div>`).join('')
-        : '<p class="text-muted">現在、クーポンや割引を実施している競合はありません。</p>';
-
-      container.innerHTML = `<div class="mr-analysis-view">
-        <div class="mr-summary-card warning">
-          <div class="card-icon">🎫</div>
-          <div class="card-text">
-            <h3>クーポン実施状況</h3>
-            <div class="card-value">${couponHotels.length} / 6 施設</div>
-          </div>
-        </div>
-        <div class="mr-analysis-details" style="margin-top:20px;">
-          <h4>クーポン・割引実施宿リスト</h4>
-          <div class="mr-list-container">${couponListHtml}</div>
-          <p class="mr-analysis-tip" style="margin-top: 16px;">
-            💡 <strong>価格調整のアドバイス:</strong><br/>
-            クーポンを配布しているホテルは、表示価格より実質支払額が安くなっています。当ホテルの価格がそれより高すぎないか、または実質価格で対抗すべきかの指標になります。
-          </p>
-        </div>
       </div>`;
       break;
 
     case 'stats':
-      const tips = [];
-      if (fullHotels.length >= 2) {
-        tips.push(`<li class="mr-tip-item danger">
-          <i class="fas fa-exclamation-triangle"></i>
-          <div>
-            <strong>競合ホテルの売り切れが始まっています（${fullHotels.length}施設が満室）。</strong><br/>
-            需要が急増している証拠です。当ホテルもすぐに空室価格の上昇（1,000円〜2,000円値上げ）を検討してください。
-          </div>
-        </li>`);
-      }
-      if (couponHotels.length >= 3) {
-        tips.push(`<li class="mr-tip-item warning">
-          <i class="fas fa-percent"></i>
-          <div>
-            <strong>多くの競合（${couponHotels.length}施設）がクーポンによる割引を実施しています。</strong><br/>
-            エリア全体の平日の集客が鈍い可能性があります。当ホテルも素泊まり基準価格を下限値付近まで下げるか、直前割キャンペーンの実施を推奨します。
-          </div>
-        </li>`);
-      }
-      if (directAvg && directAvg > 7500) {
-        tips.push(`<li class="mr-tip-item success">
-          <i class="fas fa-chart-line"></i>
-          <div>
-            <strong>競合の平均価格が強気の推移（¥${directAvg.toLocaleString()}）を見せています。</strong><br/>
-            週末または周辺イベントによる需要高騰です。当ホテルの推奨価格も引き上げ方向での調整が効果的です。
-          </div>
-        </li>`);
-      }
-      if (tips.length === 0) {
-        tips.push(`<li class="mr-tip-item info">
-          <i class="fas fa-info-circle"></i>
-          <div>
-            <strong>市況は極めて安定しています。</strong><br/>
-            競合の価格帯は平均 ¥${(directAvg || 7000).toLocaleString()} 前後で推移しています。基本価格通りの設定、または標準的なダイナミックプライシング推奨値での運用が適切です。
-          </div>
-        </li>`);
-      }
-
+      const labelObj = summary.marketPressureScore >= 0 ? getMarketPressureLabel(summary.marketPressureScore) : null;
       container.innerHTML = `<div class="mr-stats-view">
-        <h3 style="font-size: 1.1rem; margin-bottom: 16px; font-weight: 700;">📊 那須エリア市場サマリー</h3>
-        <div class="mr-stats-summary-grid">
-          <div class="mr-summary-item-box">
-            <span class="label">直接比較 平均価格</span>
-            <span class="value">${directAvg ? `¥${directAvg.toLocaleString()}` : '満室・データなし'}</span>
-          </div>
-          <div class="mr-summary-item-box">
-            <span class="label">直接比較 最安値</span>
-            <span class="value" style="color:#ef4444;">${directMin ? `¥${directMin.toLocaleString()}` : '満室・データなし'}</span>
-          </div>
-          <div class="mr-summary-item-box">
-            <span class="label">直接比較 最高値</span>
-            <span class="value" style="color:#10b981;">${directMax ? `¥${directMax.toLocaleString()}` : '満室・データなし'}</span>
-          </div>
+        <h3 style="font-size: 1.1rem; margin-bottom: 16px; font-weight: 700;">📊 分析サマリー</h3>
+        
+        <div style="background: #fff; padding: 20px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); margin-bottom: 20px;">
+          <h4 style="color: var(--primary); margin-top: 0; margin-bottom: 12px; font-size: 14px;">市場の状況</h4>
+          <p style="font-size: 14px; line-height: 1.6; margin:0;">${labelObj ? labelObj.message : 'データが不足しています。'}</p>
         </div>
 
-        <div style="margin-top: 24px;">
-          <h4 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--primary);">💡 AIによる意思決定サポートインサイト</h4>
-          <ul class="mr-tips-list" style="list-style: none; padding: 0; display:flex; flex-direction:column; gap:12px;">
-            ${tips.join('')}
-          </ul>
+        <div style="background: #fff; padding: 20px; border-radius: var(--radius-sm); border: 1.5px solid var(--border);">
+          <h4 style="color: #dc2626; margin-top: 0; margin-bottom: 12px; font-size: 14px;">推奨アクション</h4>
+          <p style="font-size: 14px; line-height: 1.6; font-weight: bold; margin:0;">${labelObj ? labelObj.priceAction : 'データが不足しています。'}</p>
+          <p style="font-size: 11px; color: #64748b; margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+            この料金提案は、市場の予約可能状況を基にした参考値です。自ホテルの残室数、予約進捗、曜日、イベント、競合料金を確認したうえで最終判断してください。
+          </p>
         </div>
       </div>`;
       break;
