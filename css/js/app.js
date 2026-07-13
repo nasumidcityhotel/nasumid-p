@@ -35,9 +35,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ナビゲーションのイベント
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      e.preventDefault();
       const pageId = item.dataset.page;
       if (pageId) {
+        e.preventDefault();
         switchPage(pageId);
         // モバイル：メニュークリックで閉じる
         if (window.innerWidth <= 768) {
