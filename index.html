@@ -1,0 +1,757 @@
+ｋ<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ダイナミックプライシング管理システム｜那須ミッドシティホテル</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ===== LOGIN PAGE (Disabled for Local Mode) =====
+<div id="login-page" class="login-page" style="display:none;"> ... </div>
+-->
+
+<div class="app-container" id="app-container">
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="hotel-logo">
+      <i class="fas fa-hotel"></i>
+    </div>
+    <div class="hotel-name">
+      <span class="hotel-name-main">那須ミッドシティ</span>
+      <span class="hotel-name-sub">価格管理システム</span>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <ul>
+      <li class="nav-item active" data-page="dashboard">
+        <a href="#"><i class="fas fa-tachometer-alt"></i><span>ダッシュボード</span></a>
+      </li>
+      <li class="nav-item" data-page="proposals">
+        <a href="#"><i class="fas fa-lightbulb"></i><span>価格提案</span>
+          <span class="badge" id="badge-proposals">0</span>
+        </a>
+      </li>
+      <li class="nav-item" data-page="calendar">
+        <a href="#"><i class="fas fa-calendar-alt"></i><span>カレンダー</span></a>
+      </li>
+      <li class="nav-item" data-page="market">
+        <a href="#"><i class="fas fa-search-dollar"></i><span>競合調査</span></a>
+      </li>
+      <li class="nav-item" data-page="history">
+        <a href="#"><i class="fas fa-history"></i><span>承認履歴</span></a>
+      </li>
+      <li class="nav-item" data-page="settings">
+        <a href="#"><i class="fas fa-sliders-h"></i><span>価格設定</span></a>
+      </li>
+      <li class="nav-item" data-page="csv">
+        <a href="#"><i class="fas fa-file-csv"></i><span>CSVインポート</span></a>
+      </li>
+      <li class="nav-item" style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <a href="#" onclick="logout()"><i class="fas fa-sign-out-alt"></i><span>ログアウト</span></a>
+      </li>
+    </ul>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="system-status">
+      <span class="status-dot active"></span>
+      <span>エンジン稼働中</span>
+    </div>
+    <div class="ai-trained-badge">
+      <i class="fas fa-brain"></i> 過去3年分データ学習済み
+    </div>
+    <div class="last-calc">最終計算: <span id="last-calc-time">--</span></div>
+  </div>
+</aside>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="main-content" id="main-content">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <button class="sidebar-toggle" id="sidebar-toggle">
+      <i class="fas fa-bars"></i>
+    </button>
+    <div class="topbar-title" id="page-title">
+      <span class="brand-label">那須ミッドシティホテル変動料金</span>
+      <span class="page-label"> | ダッシュボード</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-primary" id="run-engine-btn" onclick="runPricingEngine()">
+        <i class="fas fa-sync-alt"></i> <span class="btn-text">再計算</span>
+      </button>
+      <div class="topbar-date">
+        <i class="fas fa-clock"></i> <span id="current-datetime"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== PAGE: DASHBOARD ===== -->
+  <section class="page active" id="page-dashboard">
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon blue"><i class="fas fa-bed"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">本日稼働率</div>
+          <div class="kpi-value" id="kpi-occupancy">92<span class="kpi-unit">%</span></div>
+          <div class="kpi-sub"><i class="fas fa-arrow-up green"></i> 前日比 +5%</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon green"><i class="fas fa-yen-sign"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">平均客室単価 (ADR)</div>
+          <div class="kpi-value" id="kpi-adr">¥<span id="kpi-adr-val">8,450</span></div>
+          <div class="kpi-sub"><i class="fas fa-arrow-up green"></i> 前日比 +¥800</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon orange"><i class="fas fa-chart-line"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">RevPAR</div>
+          <div class="kpi-value">¥<span id="kpi-revpar">7,774</span></div>
+          <div class="kpi-sub"><i class="fas fa-arrow-up green"></i> 前日比 +¥1,200</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon purple"><i class="fas fa-bell"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">承認待ち提案数</div>
+          <div class="kpi-value pending-count" id="kpi-pending">0</div>
+          <div class="kpi-sub">最新計算より</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 本日の運用フロー（最優先） -->
+    <div class="card" style="border: 2px solid var(--primary); background: #f8fafc; margin-bottom: 24px;">
+      <div class="card-header" style="background: var(--primary); color: white;">
+        <h2 style="color: white;"><i class="fas fa-check-circle"></i> 【本日の5分タスク】承認・却下の判断</h2>
+        <span style="font-size: 11px; opacity: 0.9;">最終更新: 2026/04/18 09:00</span>
+      </div>
+      <div class="card-body" style="display: flex; gap: 20px; align-items: stretch; flex-wrap: wrap;">
+        
+        <div style="flex: 1; min-width: 250px; background: white; padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--text);"><i class="fas fa-gavel"></i> 判断ルール（迷ったらそのまま）</h3>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+              <span style="width: 80px; padding: 2px 8px; background: #fee2e2; color: #ef4444; border-radius: 4px; font-weight: 700; text-align: center;">80%以上</span>
+              <span>→ <strong>即決承認 (YES)</strong></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+              <span style="width: 80px; padding: 2px 8px; background: #fef3c7; color: #d97706; border-radius: 4px; font-weight: 700; text-align: center;">70%程度</span>
+              <span>→ 状況を見て判断</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+              <span style="width: 80px; padding: 2px 8px; background: #f1f5f9; color: #64748b; border-radius: 4px; font-weight: 700; text-align: center;">70%未満</span>
+              <span>→ 基本見送り (SKIP)</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex: 1.5; min-width: 300px; display: flex; flex-direction: column; justify-content: center;">
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <div style="text-align: center; flex: 1;">
+              <div style="font-size: 12px; color: var(--text-muted);">対応が必要な提案</div>
+              <div style="font-size: 32px; font-weight: 800; color: var(--primary);" id="dashboard-urgent-count">--</div>
+            </div>
+            <div style="width: 2px; height: 50px; background: var(--border);"></div>
+            <div style="flex: 2;">
+              <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+                本日の提案は、<strong>信頼度80%以上の推奨値</strong>が中心です。色付きの行（<span style="color:#ef4444;font-weight:700;">赤</span>）を確認し、判断してください。
+              </p>
+              <button class="btn btn-primary" style="margin-top: 10px;" onclick="scrollToProposals()">
+                <i class="fas fa-arrow-down"></i> 提案リストへ移動
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="chart-row">
+      <div class="card chart-card">
+        <div class="card-header">
+          <h2><i class="fas fa-chart-bar"></i> 今後30日間の需要予測 &amp; 推奨価格</h2>
+        </div>
+        <div class="card-body" style="height:300px;">
+          <canvas id="demandChart"></canvas>
+        </div>
+      </div>
+      <div class="card chart-card small">
+        <div class="card-header">
+          <h2><i class="fas fa-pie-chart"></i> チャネル別予約比率</h2>
+        </div>
+        <div class="card-body" style="height:300px;">
+          <canvas id="channelChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3-Year Trend Chart -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fas fa-history"></i> 年度別 稼働率推移比較（過去3年間）</h2>
+        <div class="legend-item" style="font-size: 11px;">
+          <span style="color:#94a3b8">■ 2024年</span> &nbsp; 
+          <span style="color:#3b82f6">■ 2025年</span> &nbsp; 
+          <span style="color:#2563eb; font-weight: 700;">■ 2026年（予測含む）</span>
+        </div>
+      </div>
+      <div class="card-body" style="height:260px;">
+        <canvas id="travelTrendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Featured Room Section -->
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header">
+        <h2><i class="fas fa-gem"></i> 本日の注目客室</h2>
+      </div>
+      <div class="card-body" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 300px;">
+          <img src="comfort.jpg" alt="コンフォートツインルーム" style="width: 100%; border-radius: var(--radius); box-shadow: var(--shadow-md);">
+        </div>
+        <div style="flex: 1.5; min-width: 300px;">
+          <h3 style="font-size: 20px; margin-bottom: 10px;">コンフォートルーム</h3>
+          <p style="color: var(--text-muted); margin-bottom: 16px; line-height: 1.6;">
+            本日は近隣イベントの影響で需要が急増していますが、規定により<strong>最大2,000円アップ</strong>の範囲内で最適化を行っています。信頼度は<strong>92%</strong>と非常に高く、確実に収益を上積みできる推奨値です。
+          </p>
+          <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+            <div style="background: #eff6ff; padding: 10px 16px; border-radius: var(--radius-sm); flex: 1;">
+              <div style="font-size: 11px; color: var(--text-muted);">現在価格</div>
+              <div style="font-size: 18px; font-weight: 700; color: var(--text);">¥8,200</div>
+            </div>
+            <div style="background: #ecfdf5; padding: 10px 16px; border-radius: var(--radius-sm); flex: 1; border: 1px solid var(--success);">
+              <div style="font-size: 11px; color: var(--success);">推奨価格</div>
+              <div style="font-size: 18px; font-weight: 700; color: var(--success);">¥10,200</div>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="switchPage('proposals')">
+            <i class="fas fa-check-circle"></i> この提案を詳しく見る
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Proposals Table -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fas fa-list-alt"></i> 最近の価格提案（承認待ち）</h2>
+        <button class="btn btn-sm btn-outline" onclick="switchPage('proposals')">全て見る</button>
+      </div>
+      <div class="card-body">
+        <div class="table-container">
+          <table class="data-table" id="dashboard-proposals-table">
+            <thead>
+            <tr>
+              <th>日付</th>
+              <th>部屋タイプ</th>
+              <th>現在価格</th>
+              <th>提案価格</th>
+              <th>変動</th>
+              <th>理由</th>
+              <th>信頼度</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="dashboard-proposals-body">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  </section>
+
+  <!-- ===== PAGE: PROPOSALS ===== -->
+  <section class="page" id="page-proposals">
+    <div class="page-header-bar">
+      <div class="filter-bar">
+        <label>表示フィルター:</label>
+        <select id="proposal-filter" onchange="filterProposals()">
+          <option value="all">全て</option>
+          <option value="pending">承認待ち</option>
+          <option value="approved">承認済み</option>
+          <option value="rejected">却下済み</option>
+        </select>
+        <select id="room-filter" onchange="filterProposals()">
+          <option value="all">全室タイプ</option>
+          <option value="モデレートルーム">モデレート</option>
+          <option value="コンフォートルーム">コンフォート</option>
+          <option value="コーナールーム">コーナー</option>
+          <option value="ツインルーム">ツイン</option>
+          <option value="ユニバーサルルーム">ユニバーサル</option>
+          <option value="デラックスツイン">デラックスツイン</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="runPricingEngine()">
+          <i class="fas fa-sync-alt"></i> 再計算
+        </button>
+        <button class="btn btn-success btn-sm" onclick="approveAll()">
+          <i class="fas fa-check-double"></i> 全て承認
+        </button>
+      </div>
+    </div>
+
+    <div id="proposals-container"></div>
+  </section>
+
+  <!-- ===== PAGE: CALENDAR ===== -->
+  <section class="page" id="page-calendar">
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fas fa-calendar-alt"></i> 価格カレンダー</h2>
+        <div class="cal-nav">
+          <button class="btn btn-sm btn-outline" onclick="prevMonth()"><i class="fas fa-chevron-left"></i></button>
+          <span id="cal-month-label" class="cal-month-label"></span>
+          <button class="btn btn-sm btn-outline" onclick="nextMonth()"><i class="fas fa-chevron-right"></i></button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="cal-legend">
+          <span class="legend-item"><span class="legend-dot approved"></span>承認済み価格</span>
+          <span class="legend-item"><span class="legend-dot pending"></span>提案中</span>
+          <span class="legend-item"><span class="legend-dot high-demand"></span>高需要予測</span>
+          <span class="legend-item"><span class="legend-dot low-demand"></span>低需要予測</span>
+        </div>
+        <div id="price-calendar" class="price-calendar"></div>
+      </div>
+    </div>
+
+    <!-- Calendar Detail Modal Placeholder -->
+    <div class="card" id="cal-detail-card" style="display:none;">
+      <div class="card-header">
+        <h2 id="cal-detail-title"></h2>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('cal-detail-card').style.display='none'">閉じる</button>
+      </div>
+      <div class="card-body" id="cal-detail-body"></div>
+    </div>
+  </section>
+
+  <!-- ===== PAGE: HISTORY ===== -->
+  <section class="page" id="page-history">
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fas fa-history"></i> 承認・却下履歴</h2>
+        <div class="filter-bar">
+          <input type="text" id="history-search" placeholder="日付・部屋タイプで検索..." oninput="filterHistory()" class="search-input">
+          <button class="btn btn-sm btn-outline" onclick="exportHistoryCSV()">
+            <i class="fas fa-download"></i> CSVエクスポート
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-container">
+          <table class="data-table" id="history-table">
+            <thead>
+              <tr>
+                <th>操作日時</th>
+                <th>日付</th>
+                <th>部屋タイプ</th>
+                <th>旧価格</th>
+                <th>新価格</th>
+                <th>変動額</th>
+                <th>理由</th>
+                <th>ステータス</th>
+                <th>担当者</th>
+              </tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+        <div id="history-empty" class="empty-state" style="display:none;">
+          <i class="fas fa-inbox"></i>
+          <p>履歴はまだありません</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PAGE: SETTINGS ===== -->
+  <section class="page" id="page-settings">
+    <div class="settings-grid">
+
+      <!-- 基準価格設定 -->
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fas fa-tag"></i> 部屋タイプ別 基準価格・上下限設定</h2>
+        </div>
+        <div class="card-body">
+          <div class="table-container">
+            <table class="data-table settings-table" id="room-settings-table">
+              <thead>
+                <tr>
+                  <th>部屋タイプ</th>
+                  <th>基準価格</th>
+                  <th>下限価格</th>
+                  <th>上限価格</th>
+                  <th>最大上げ幅</th>
+                  <th>最大下げ幅</th>
+                  <th>自動承認</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="room-settings-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 需要係数設定 -->
+      <div class="card">
+        <div class="card-header">
+          <h2><i class="fas fa-cogs"></i> 需要係数・ルール設定</h2>
+        </div>
+        <div class="card-body">
+          <div class="settings-form">
+
+            <div class="settings-section">
+              <h3><i class="fas fa-calendar-week"></i> 曜日別係数</h3>
+              <div class="coeff-grid" id="weekday-coeffs"></div>
+            </div>
+
+            <div class="settings-section">
+              <h3><i class="fas fa-percentage"></i> 稼働率連動価格</h3>
+              <div class="range-setting">
+                <div class="range-row">
+                  <label>稼働率 90%以上</label>
+                  <input type="number" id="occ-90" value="25" min="0" max="100"> %アップ
+                </div>
+                <div class="range-row">
+                  <label>稼働率 70〜89%</label>
+                  <input type="number" id="occ-70" value="10" min="0" max="100"> %アップ
+                </div>
+                <div class="range-row">
+                  <label>稼働率 50〜69%</label>
+                  <input type="number" id="occ-50" value="0" min="-50" max="50"> %
+                </div>
+                <div class="range-row">
+                  <label>稼働率 50%未満</label>
+                  <input type="number" id="occ-low" value="-10" min="-50" max="0"> %ダウン
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3><i class="fas fa-star"></i> イベント・特日設定</h3>
+              <div id="event-list"></div>
+              <button class="btn btn-sm btn-outline" onclick="addEvent()">
+                <i class="fas fa-plus"></i> イベント追加
+              </button>
+            </div>
+
+            <div class="settings-section">
+              <h3><i class="fas fa-shield-alt"></i> 変更幅制限</h3>
+              <div class="range-row">
+                <label>1回の変更で上げられる最大額</label>
+                <input type="number" id="max-change-up" value="5000" min="0" max="50000"> 円
+              </div>
+              <div class="range-row">
+                <label>1回の変更で下げられる最大額</label>
+                <input type="number" id="max-change-down" value="3000" min="0" max="50000"> 円
+              </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveSettings()">
+              <i class="fas fa-save"></i> 設定を保存
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== PAGE: CSV IMPORT ===== -->
+  <section class="page" id="page-csv">
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fas fa-file-csv"></i> CSVデータインポート</h2>
+      </div>
+      <div class="card-body">
+        <div class="csv-intro">
+          <p>PMSや各OTAからエクスポートした宿泊実績CSVをインポートすることで、需要予測精度を高めます。</p>
+        </div>
+
+        <div class="csv-format-info">
+          <h3>期待するCSVフォーマット</h3>
+          <div class="code-block">
+            <code>日付,部屋タイプ,販売室数,稼働率,ADR,チャネル,リードタイム,キャンセル数<br>
+2025-04-01,スタンダード,25,83%,16500,楽天トラベル,14,2<br>
+2025-04-01,デラックス,12,75%,22000,じゃらん,7,1</code>
+          </div>
+          <button class="btn btn-sm btn-outline" onclick="downloadSampleCSV()">
+            <i class="fas fa-download"></i> サンプルCSVをダウンロード
+          </button>
+        </div>
+
+        <div class="csv-upload-area" id="csv-drop-zone">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <p>CSVファイルをドラッグ&amp;ドロップ<br><small>または</small></p>
+          <label class="btn btn-primary" for="csv-file-input">
+            <i class="fas fa-folder-open"></i> ファイルを選択
+          </label>
+          <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="handleCSVUpload(event)">
+        </div>
+
+        <div id="csv-preview" style="display:none;">
+          <h3>プレビュー（先頭5行）</h3>
+          <div id="csv-preview-table"></div>
+          <div class="csv-actions">
+            <button class="btn btn-primary" onclick="importCSV()">
+              <i class="fas fa-database"></i> インポート実行
+            </button>
+            <button class="btn btn-outline" onclick="cancelCSV()">キャンセル</button>
+          </div>
+        </div>
+
+        <!-- Manual Data Entry -->
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h2><i class="fas fa-keyboard"></i> 手動データ入力</h2>
+          </div>
+          <div class="card-body">
+            <div class="manual-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>日付</label>
+                  <input type="date" id="manual-date">
+                </div>
+                <div class="form-group">
+                  <label>部屋タイプ</label>
+                  <select id="manual-room">
+                    <option>スタンダード</option>
+                    <option>デラックス</option>
+                    <option>スイート</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>稼働率(%)</label>
+                  <input type="number" id="manual-occ" min="0" max="100" placeholder="75">
+                </div>
+                <div class="form-group">
+                  <label>ADR(円)</label>
+                  <input type="number" id="manual-adr" min="0" placeholder="18000">
+                </div>
+                <div class="form-group">
+                  <label>チャネル</label>
+                  <select id="manual-channel">
+                    <option>楽天トラベル</option>
+                    <option>じゃらん</option>
+                    <option>公式サイト</option>
+                    <option>Booking.com</option>
+                  </select>
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="addManualData()">
+                <i class="fas fa-plus"></i> データを追加
+              </button>
+            </div>
+            <div id="manual-data-table-container" style="margin-top:16px;"></div>
+            <div style="margin-top: 12px; text-align: right;">
+              <button class="btn btn-sm btn-outline-danger" onclick="clearAllManualData()">
+                <i class="fas fa-trash-alt"></i> 全てのデータを削除
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PAGE: MARKET RESEARCH ===== -->
+  <section class="page" id="page-market">
+    <div class="mr-container">
+      <!-- プレミアム・ヘッダー -->
+      <div class="mr-header">
+        <span class="mr-header-badge">NASU MIDCITY REVENUE ENGINE</span>
+        <h2 class="mr-header-title">市場相場 競合比較インサイト</h2>
+        
+        <div class="mr-header-intro">
+          <p>那須ミッドシティホテル 管理者様、お疲れ様です。</p>
+          <p>
+            本画面は、那須塩原・西那須野エリアの競合他社の販売価格や空室状況を楽天トラベルのデータから自動集計し、
+            客室料金の最適化（値上げ・値下げ）の判断をサポートする分析パネルです。<br/>
+            カレンダーから日付を選択し、確認したい指標をクリックすることで、最適な価格判断の材料が一目で把握できます。
+          </p>
+        </div>
+
+        <!-- 稼働率カードグリッド -->
+        <div class="mr-occupancy-grid">
+          <!-- 全体宿泊率カード -->
+          <div class="mr-occ-card">
+            <div class="mr-occ-card-body">
+              <h3 class="mr-occ-title">
+                <span>🏨</span> 那須塩原エリア 全体宿泊率
+              </h3>
+              <p class="mr-occ-desc">
+                対象: 楽天トラベル掲載の那須・塩原エリア全施設（約100軒）
+              </p>
+              <div id="mr-scraping-status" class="mr-status-badge">
+                読み込み中...
+              </div>
+            </div>
+            <div class="mr-occ-value-area">
+              <div id="mr-area-occ-val" class="mr-occ-value">--%</div>
+              <div id="mr-area-occ-label" class="mr-occ-label">通常</div>
+            </div>
+          </div>
+
+          <!-- 調査対象6施設 平均稼働率カード -->
+          <div class="mr-occ-card">
+            <div class="mr-occ-card-body">
+              <h3 class="mr-occ-title">
+                <span>📋</span> 調査対象6施設 平均稼働率
+              </h3>
+              <p class="mr-occ-desc">
+                リサーチしている競合・参考ホテル（計6軒）の平均
+              </p>
+              <div class="mr-status-badge blue">
+                🔍 個別稼働率の集計値
+              </div>
+            </div>
+            <div class="mr-occ-value-area">
+              <div id="mr-competitor-occ-val" class="mr-occ-value">--%</div>
+              <div id="mr-competitor-occ-label" class="mr-occ-label">6軒中0軒が満室</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 調査条件 -->
+        <div class="mr-criteria-box">
+          <h3>📋 調査条件（価格比較の基準）</h3>
+          <p>
+            正確な相場比較を行うため、全施設について以下の条件で統一して料金を取得しています。<br/>
+            <strong>【 大人1名 / 1室利用 / 標準シングル客室（素泊まり または 朝食付） 】</strong>
+          </p>
+        </div>
+
+        <!-- 選定根拠 -->
+        <div class="mr-reasons-box">
+          <h3>💡 なぜこの6施設を調べるのか？（選定の根拠）</h3>
+          <ul class="mr-reasons-list">
+            <li>
+              <strong>🔵 直接比較（4施設）</strong>
+              東横イン那須塩原駅西口、ルートイン西那須野、ルートイン第２西那須野、ビジネスホテル那須高原ノースイン。<br>
+              駅近や幹線道路沿いの競合ビジネスホテルであり、この平均・最安値が当ホテルの「基準価格」のベースになります。
+            </li>
+            <li>
+              <strong>🔘 相場参考（2施設）</strong>
+              那須マロニエホテル、乃木温泉ホテル。<br>
+              大浴場や温泉設備を備えた付加価値の高い宿。連休や観光需要でエリア全体の相場がどこまで高騰するかの指標になります。
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- メイン操作エリア -->
+      <div class="mr-layout">
+        <!-- 左側: コントロールパネル -->
+        <div class="mr-sidebar">
+          <div class="mr-control-panel">
+            <h3 class="mr-control-title">1. 調査日程を選択</h3>
+            <input type="date" id="mr-date-picker" class="mr-date-picker">
+          </div>
+
+          <div class="mr-control-panel">
+            <h3 class="mr-control-title">2. 確認したい指標</h3>
+            <div class="mr-metric-buttons" id="mr-metric-buttons">
+              <!-- JSで動的に生成 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 右側: 結果ディスプレイ -->
+        <div class="mr-result-area">
+          <div class="mr-result-header">
+            <h4 id="mr-result-title" class="mr-result-title">
+              🏢 施設ごとの価格
+            </h4>
+            <span id="mr-result-date" class="mr-result-date">
+              対象日: 2026/07/22
+            </span>
+          </div>
+          
+          <div class="mr-result-content" id="mr-result-content">
+            <!-- JSで動的に表示 -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===== APPROVAL MODAL ===== -->
+<div class="modal-overlay" id="approval-modal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">価格変更の確認</h2>
+      <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body" id="modal-body">
+    </div>
+    <div class="modal-footer">
+      <div class="modal-price-adjust">
+        <label>最終確認価格（手動調整可）：</label>
+        <div class="price-adjust-row">
+          <span class="currency">¥</span>
+          <input type="number" id="modal-final-price" class="price-input-big">
+          <span class="price-range-hint" id="modal-price-range-hint"></span>
+        </div>
+      </div>
+      <div class="modal-btns">
+        <button class="btn btn-success" onclick="approveProposal()">
+          <i class="fas fa-check"></i> 承認して反映
+        </button>
+        <button class="btn btn-danger" onclick="rejectProposal()">
+          <i class="fas fa-times"></i> 却下
+        </button>
+        <button class="btn btn-outline" onclick="closeModal()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ===== LOADING OVERLAY ===== -->
+<div class="loading-overlay" id="loading-overlay" style="display:none;">
+  <div class="loading-spinner">
+    <div class="spinner"></div>
+    <p id="loading-text">価格エンジン計算中...</p>
+  </div>
+</div><!-- end app-container -->
+
+<!-- Firebase SDK (Compat) - Disabled for Local Mode
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="css/js/firebase-config.js"></script>
+<script src="css/js/auth.js"></script>
+-->
+
+<script src="css/js/data.js"></script>
+<script src="css/js/engine.js"></script>
+<script src="css/js/ui.js"></script>
+<script src="css/js/charts.js"></script>
+<script src="css/js/app.js"></script>
+</body>
+</html>
