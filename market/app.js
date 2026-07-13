@@ -60,7 +60,7 @@ function formatDate(dateStr) {
 // ==========================================
 window.onload = function() {
   // ローカルストレージから市場調査キャッシュを取得
-  const mr = localStorage.getItem('dp_market_research');
+  const mr = localStorage.getItem('dp_market_research_v5');
   if (mr) {
     AppState.marketResearchData = JSON.parse(mr);
   }
@@ -145,9 +145,9 @@ async function getMarketResearchData(dateStr) {
   const todayPrefix = new Date().toISOString().split('T')[0];
   const cachedData = dateData.filter(d => d.updatedAt && d.updatedAt.startsWith(todayPrefix));
   if (cachedData.length > 0) {
-    // キャッシュデータに有効な稼働率が含まれているか検証する
-    const hasOcc = cachedData.every(h => h.hasOwnProperty('occupancyRate') && h.occupancyRate !== undefined && !isNaN(h.occupancyRate));
-    if (hasOcc) return cachedData;
+    // キャッシュデータに有効なステータスが含まれているか検証する
+    const isValid = cachedData.every(h => h.hasOwnProperty('status'));
+    if (isValid) return cachedData;
   }
 
   const d = new Date(dateStr + 'T00:00:00');
@@ -222,17 +222,11 @@ async function getMarketResearchData(dateStr) {
     if (!useFallback && scrapingResults[hotel.id]) {
       isFull = scrapingResults[hotel.id].isFull;
       vacantCount = scrapingResults[hotel.id].vacantCount;
-      if (isFull) {
-        occRate = 100;
-      } else {
-        // プラン数が多いほど残室に余裕があると仮定し、稼働率を低めにする (プラン数が少ないほど満室に近い)
-        occRate = Math.max(30, Math.min(95, 95 - vacantCount * 3));
-      }
     } else {
       // フォールバック（シミュレーション値）
       const fullChance = (isWeekend ? 0.35 : 0.08) + (isHolidaySeason ? 0.4 : 0) + (ev ? 0.3 : 0);
       isFull = ((seed + idx * 13) % 100) < (fullChance * 100);
-      occRate = isFull ? 100 : Math.min(95, 45 + ((seed + idx * 23) % 45));
+      vacantCount = isFull ? 0 : 5 + ((seed + idx * 7) % 15);
     }
 
     return {
@@ -242,12 +236,13 @@ async function getMarketResearchData(dateStr) {
       hotelName: hotel.name,
       type: hotel.type,
       status: isFull ? 'full' : 'available',
+      basePrice: base,
       price: Math.floor((base + markup) / 100) * 100,
       planName: planNames[hotel.id],
       roomType: roomTypes[hotel.id],
       meals: '朝食付',
       hasCoupon: ((seed + idx * 19) % 100) < 30,
-      occupancyRate: occRate,
+      vacantCount: vacantCount,
       updatedAt: new Date().toISOString()
     };
   });
@@ -256,7 +251,7 @@ async function getMarketResearchData(dateStr) {
   let currentAll = AppState.marketResearchData.filter(d => d.dateKey !== dateStr);
   generated.forEach(item => currentAll.push(item));
   AppState.marketResearchData = currentAll;
-  localStorage.setItem('dp_market_research', JSON.stringify(currentAll));
+  localStorage.setItem('dp_market_research_v5', JSON.stringify(currentAll));
 
   return generated;
 }
@@ -337,40 +332,48 @@ function renderMarketMetricContent(dateStr, metricId, data) {
   const fullHotels = data.filter(d => d.status === 'full');
   const couponHotels = data.filter(d => d.hasCoupon);
 
-  // 6軒平均稼働率の算出
-  const competitorAvgOcc = Math.round(data.reduce((sum, h) => {
-    // 過去の古いキャッシュデータ対策として、occupancyRateがない場合は安全に自動補完する
-    if (typeof h.occupancyRate === 'undefined' || h.occupancyRate === null || isNaN(h.occupancyRate)) {
-      const isFull = h.status === 'full';
-      const dObj = new Date(dateStr + 'T00:00:00');
-      const charCodeSum = h.hotelId ? h.hotelId.charCodeAt(0) : 10;
-      h.occupancyRate = isFull ? 100 : Math.min(95, 45 + ((dObj.getDate() * 7 + charCodeSum) % 45));
-    }
-    return sum + h.occupancyRate;
-  }, 0) / data.length);
-  
   const compOccVal = document.getElementById('mr-competitor-occ-val');
   const compOccLabel = document.getElementById('mr-competitor-occ-label');
-  if (compOccVal) compOccVal.textContent = `${competitorAvgOcc}%`;
-  if (compOccLabel) compOccLabel.textContent = `6軒中 ${fullHotels.length} 軒が満室`;
+  if (compOccVal) compOccVal.textContent = `${fullHotels.length}軒`;
+  if (compOccLabel) compOccLabel.textContent = `満室 / 6軒中`;
 
   switch (metricId) {
     case 'prices':
       container.innerHTML = `<div class="mr-grid">
         ${data.map(h => {
           const typeBadge = h.type === 'direct' ? '<span class="mr-hotel-type-badge blue">🔵 直接比較</span>' : '<span class="mr-hotel-type-badge orange">🔘 相場参考</span>';
-          const priceStr = h.status === 'full' 
-            ? '<span class="price-full">満室御礼</span>' 
-            : `<span class="price-num">¥${h.price.toLocaleString()}</span>`;
+          let priceStr = '';
+          if (h.status === 'full') {
+            priceStr = '<span class="price-full">満室御礼</span>';
+          } else {
+            const diff = h.price - (h.basePrice || h.price);
+            let diffBadge = '';
+            if (diff > 0) {
+              diffBadge = `<span style="font-size: 11.5px; color: #16a34a; font-weight: 700; background: #dcfce7; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fas fa-arrow-up"></i> +¥${diff.toLocaleString()}</span>`;
+            } else if (diff < 0) {
+              diffBadge = `<span style="font-size: 11.5px; color: #dc2626; font-weight: 700; background: #fee2e2; padding: 2px 6px; border-radius: 4px; margin-left: 8px;"><i class="fas fa-arrow-down"></i> ¥${diff.toLocaleString()}</span>`;
+            }
+            
+            priceStr = `
+              <div style="font-size: 11px; color: #64748b; font-weight: normal; margin-bottom: 2px; text-decoration: line-through;">通常料金: ¥${(h.basePrice || h.price).toLocaleString()}</div>
+              <div style="display: flex; align-items: center;">
+                <span class="price-num">¥${h.price.toLocaleString()}</span>
+                ${diffBadge}
+              </div>
+            `;
+          }
+
           const couponBadge = h.hasCoupon ? '<span class="mr-badge coupon">🎫 クーポン</span>' : '';
-          const occBadge = `<span class="mr-badge occupancy"><i class="fas fa-chart-line"></i> 稼働率: ${h.occupancyRate}%</span>`;
+          const vacBadge = h.status === 'full' 
+            ? `<span class="mr-badge vacant" style="background:#fee2e2; color:#dc2626;"><i class="fas fa-times-circle"></i> 満室</span>`
+            : `<span class="mr-badge vacant" style="background:#e0f2fe; color:#0369a1;"><i class="fas fa-door-open"></i> 販売プラン: ${h.vacantCount || '-'}件</span>`;
           
           return `<div class="mr-hotel-card ${h.status === 'full' ? 'full' : ''}">
             <div class="mr-hotel-card-header">
               ${typeBadge}
               <h4 class="mr-hotel-name">${h.hotelName}</h4>
             </div>
-            <div class="mr-hotel-price-row">
+            <div class="mr-hotel-price-row" style="margin-bottom: 12px;">
               ${priceStr}
             </div>
             <div class="mr-hotel-details">
@@ -378,7 +381,7 @@ function renderMarketMetricContent(dateStr, metricId, data) {
               <p><strong>部屋:</strong> ${h.roomType || 'シングルルーム'}</p>
               <div class="mr-hotel-badges">
                 ${couponBadge}
-                ${occBadge}
+                ${vacBadge}
                 <span class="mr-badge">🛌 朝食込</span>
               </div>
             </div>
