@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>市場相場 競合比較インサイト ｜ 那須ミッドシティホテル</title>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="mr-container">
+    <!-- プレミアム・ヘッダー -->
+    <header class="mr-header">
+      <span class="mr-header-badge">NASU MIDCITY REVENUE ENGINE</span>
+      <h1 class="mr-header-title">市場相場 競合比較インサイト</h1>
+      
+      <div class="mr-header-intro">
+        <p>那須ミッドシティホテル 管理者様、お疲れ様です。</p>
+        <p>
+          本画面は、那須塩原・西那須野エリアの競合他社の販売価格や空室状況を楽天トラベルのデータから自動集計し、
+          客室料金の最適化（値上げ・値下げ）の判断をサポートする分析パネルです。<br/>
+          カレンダーから日付を選択し、確認したい指標をクリックすることで、最適な価格判断の材料が一目で把握できます。
+        </p>
+      </div>
+
+      <!-- 稼働率カードグリッド -->
+      <div class="mr-occupancy-grid">
+        <!-- 全体宿泊率カード -->
+        <div class="mr-occ-card">
+          <div class="mr-occ-card-body">
+            <h3 class="mr-occ-title">
+              <span>🏨</span> 那須塩原エリア 全体宿泊率
+            </h3>
+            <p class="mr-occ-desc">
+              対象: 楽天トラベル掲載の那須・塩原エリア全施設（約100軒）
+            </p>
+            <div id="mr-scraping-status" class="mr-status-badge">
+              読み込み中...
+            </div>
+          </div>
+          <div class="mr-occ-value-area">
+            <div id="mr-area-occ-val" class="mr-occ-value">--%</div>
+            <div id="mr-area-occ-label" class="mr-occ-label">通常</div>
+          </div>
+        </div>
+
+        <!-- 調査対象6施設 平均稼働率カード -->
+        <div class="mr-occ-card">
+          <div class="mr-occ-card-body">
+            <h3 class="mr-occ-title">
+              <span>📋</span> 調査対象6施設 平均稼働率
+            </h3>
+            <p class="mr-occ-desc">
+              リサーチしている競合・参考ホテル（計6軒）の平均
+            </p>
+            <div class="mr-status-badge blue">
+              🔍 個別稼働率の集計値
+            </div>
+          </div>
+          <div class="mr-occ-value-area">
+            <div id="mr-competitor-occ-val" class="mr-occ-value">--%</div>
+            <div id="mr-competitor-occ-label" class="mr-occ-label">6軒中0軒が満室</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 調査条件 -->
+      <div class="mr-criteria-box">
+        <h3>📋 調査条件（価格比較の基準）</h3>
+        <p>
+          正確な相場比較を行うため、全施設について以下の条件で統一して料金を取得しています。<br/>
+          <strong>【 大人1名 / 1室利用 / 標準シングル客室（素泊まり または 朝食付） 】</strong>
+        </p>
+      </div>
+
+      <!-- 選定根拠 -->
+      <div class="mr-reasons-box">
+        <h3>💡 なぜこの6施設を調べるのか？（選定の根拠）</h3>
+        <ul class="mr-reasons-list">
+          <li>
+            <strong>🔵 直接比較（4施設）</strong>
+            東横イン那須塩原駅西口、ルートイン西那須野、ルートイン第２西那須野、ビジネスホテル那須高原ノースイン。<br>
+            駅近や幹線道路沿いの競合ビジネスホテルであり、この平均・最安値が当ホテルの「基準価格」のベースになります。
+          </li>
+          <li>
+            <strong>🔘 相場参考（2施設）</strong>
+            那須マロニエホテル、乃木温泉ホテル。<br>
+            大浴場や温泉設備を備えた付加価値の高い宿。連休や観光需要でエリア全体の相場がどこまで高騰するかの指標になります。
+          </li>
+        </ul>
+      </div>
+    </header>
+
+    <!-- メイン操作エリア -->
+    <div class="mr-layout">
+      <!-- 左側: コントロールパネル -->
+      <aside class="mr-sidebar">
+        <div class="mr-control-panel">
+          <h3 class="mr-control-title">1. 調査日程を選択</h3>
+          <input type="date" id="mr-date-picker" class="mr-date-picker">
+        </div>
+
+        <div class="mr-control-panel">
+          <h3 class="mr-control-title">2. 確認したい指標</h3>
+          <div class="mr-metric-buttons" id="mr-metric-buttons">
+            <!-- JSで動的に生成 -->
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右側: 結果ディスプレイ -->
+      <main class="mr-result-area">
+        <div class="mr-result-header">
+          <h4 id="mr-result-title" class="mr-result-title">
+            🏢 施設ごとの価格
+          </h4>
+          <span id="mr-result-date" class="mr-result-date">
+            対象日: ----/--/--
+          </span>
+        </div>
+        
+        <div class="mr-result-content" id="mr-result-content">
+          <!-- JSで動的に表示 -->
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
