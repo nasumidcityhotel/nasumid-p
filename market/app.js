@@ -105,7 +105,13 @@ function getMarketPressureLabel(score) {
 // 楽天トラベルから特定ホテルの空室状況をフェッチする
 // ==========================================
 async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
-  const targetUrl = `https://search.travel.rakuten.co.jp/ds/vacant/searchVacant?f_hyoji=3&f_flg=vacant&f_otona_su=1&f_heya_su=1&f_nen1=${year}&f_tuki1=${month}&f_hi1=${day}&f_no=${rakutenId}`;
+  const checkinDate = new Date(year, month - 1, day);
+  const checkoutDate = new Date(year, month - 1, day + 1);
+  const y2 = checkoutDate.getFullYear();
+  const m2 = checkoutDate.getMonth() + 1;
+  const d2 = checkoutDate.getDate();
+  
+  const targetUrl = `https://search.travel.rakuten.co.jp/ds/vacant/searchVacant?f_hyoji=3&f_flg=vacant&f_otona_su=1&f_heya_su=1&f_nen1=${year}&f_tuki1=${month}&f_hi1=${day}&f_nen2=${y2}&f_tuki2=${m2}&f_hi2=${d2}&f_no=${rakutenId}`;
   const proxyUrl = `https://nasumid-p.netlify.app/.netlify/functions/rakutenProxy`;
   try {
     const response = await fetch(proxyUrl, {
