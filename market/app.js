@@ -134,16 +134,33 @@ async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
     }
 
     if (status === 'available') {
-      // 検索フォームの <select> 内にある「1,000円」「3,000円」などのオプション文字列を除去
-      const cleanHtml = html.replace(/<select[\s\S]*?<\/select>/gi, '');
-      const priceRegex = /([1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{3,})\s*円/g;
+      // 「料金」に関するクラス名（htlPrice, dp_price, price 等）を持つタグの中にある金額を狙って抽出
+      const priceRegex = /class="[^"]*(?:price|charge)[^"]*"[^>]*>.*?([1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{3,}).*?(?:円|<\/)/gi;
+      // 予備として、JSONデータ内の価格を探す
+      const jsonPriceRegex = /"(?:hotelMinCharge|price|roomPrice)"\s*:\s*(\d{4,6})/g;
+      
       const prices = [];
       let m;
-      while ((m = priceRegex.exec(cleanHtml)) !== null) {
+      // 1. HTMLタグからの抽出
+      while ((m = priceRegex.exec(html)) !== null) {
         const val = parseInt(m[1].replace(/,/g, ''), 10);
-        // ホテル価格として現実的な下限（3,500円以上）に設定し、割引クーポン名などのノイズを除外
-        if (val >= 3500 && val < 100000) {
-          prices.push(val);
+        if (val >= 3500 && val < 100000) prices.push(val);
+      }
+      // 2. JSONデータからの抽出
+      while ((m = jsonPriceRegex.exec(html)) !== null) {
+        const val = parseInt(m[1], 10);
+        if (val >= 3500 && val < 100000) prices.push(val);
+      }
+      // 3. フォールバック: 汎用的な「◯,◯◯◯円」を探す（セレクトボックスやクーポン等のノイズを除外したHTML上で）
+      if (prices.length === 0) {
+        const cleanHtml = html
+          .replace(/<select[\s\S]*?<\/select>/gi, '')
+          .replace(/クーポン/g, '');
+        const fallbackRegex = /([1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{3,})\s*円/g;
+        let fm;
+        while ((fm = fallbackRegex.exec(cleanHtml)) !== null) {
+          const val = parseInt(fm[1].replace(/,/g, ''), 10);
+          if (val >= 3500 && val < 100000) prices.push(val);
         }
       }
       
@@ -163,6 +180,13 @@ async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
 // 指定日の調査データを取得・計算し履歴に保存する
 // ==========================================
 async function getMarketResearchData(dateStr) {
+  // --- 緊急リセット処理（データ崩壊を治すため、一度履歴をクリア） ---
+  if (!window.hasClearedBadData) {
+    localStorage.removeItem('marketResearchHistory');
+    AppState.marketResearchHistory = [];
+    window.hasClearedBadData = true;
+  }
+  // ------------------------------------------------------------------
   // 指定日の過去の調査履歴を取得（時系列順）
   const historyForDate = AppState.marketResearchHistory.filter(d => d.summary.stayDate === dateStr);
   
