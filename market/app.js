@@ -106,9 +106,13 @@ function getMarketPressureLabel(score) {
 // ==========================================
 async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
   const targetUrl = `https://search.travel.rakuten.co.jp/ds/vacant/searchVacant?f_hyoji=3&f_flg=vacant&f_otona_su=1&f_heya_su=1&f_nen1=${year}&f_tuki1=${month}&f_hi1=${day}&f_no=${rakutenId}`;
-  const proxyUrl = `https://nasumid-p.netlify.app/.netlify/functions/rakutenProxy?url=${encodeURIComponent(targetUrl)}`;
+  const proxyUrl = `https://nasumid-p.netlify.app/.netlify/functions/rakutenProxy`;
   try {
-    const response = await fetch(proxyUrl);
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUrl })
+    });
     if (!response.ok) throw new Error('Proxy network error');
     const html = await response.text();
     
@@ -165,13 +169,12 @@ async function getMarketResearchData(dateStr) {
   const historyForDate = AppState.marketResearchHistory.filter(d => d.summary.stayDate === dateStr);
   
   // スロットリング：直近1時間以内に調査していれば再調査せずキャッシュを返す
+  // ※今回はバグ解消のため一時的にキャッシュを無効化し、常に最新を取りに行くようにする
   if (historyForDate.length > 0) {
     const latest = historyForDate[historyForDate.length - 1];
     const checkedDate = new Date(latest.summary.checkedAt);
     const now = new Date();
-    if ((now - checkedDate) < 60 * 60 * 1000) {
-      return latest;
-    }
+    // if ((now - checkedDate) < 60 * 60 * 1000) { return latest; }
   }
 
   // 前回データの取得（差分比較用）

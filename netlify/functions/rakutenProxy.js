@@ -1,5 +1,26 @@
 exports.handler = async function(event, context) {
-  const targetUrl = event.queryStringParameters.url;
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+      },
+      body: ''
+    };
+  }
+
+  let targetUrl = '';
+  try {
+    if (event.body) {
+      targetUrl = JSON.parse(event.body).targetUrl;
+    }
+  } catch(e) {}
+  if (!targetUrl && event.queryStringParameters) {
+    targetUrl = event.queryStringParameters.url;
+  }
+
   if (!targetUrl) {
     return { 
       statusCode: 400, 
