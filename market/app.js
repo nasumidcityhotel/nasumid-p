@@ -106,12 +106,11 @@ function getMarketPressureLabel(score) {
 // ==========================================
 async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
   const targetUrl = `https://search.travel.rakuten.co.jp/ds/vacant/searchVacant?f_hyoji=3&f_flg=vacant&f_otona_su=1&f_heya_su=1&f_nen1=${year}&f_tuki1=${month}&f_hi1=${day}&f_no=${rakutenId}`;
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
   try {
     const response = await fetch(proxyUrl);
     if (!response.ok) throw new Error('Proxy network error');
-    const json = await response.json();
-    const html = json.contents;
+    const html = await response.text();
     
     let status = 'unknown';
     let vacantCount = 0;
