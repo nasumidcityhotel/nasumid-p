@@ -106,7 +106,7 @@ function getMarketPressureLabel(score) {
 // ==========================================
 async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
   const targetUrl = `https://search.travel.rakuten.co.jp/ds/vacant/searchVacant?f_hyoji=3&f_flg=vacant&f_otona_su=1&f_heya_su=1&f_nen1=${year}&f_tuki1=${month}&f_hi1=${day}&f_no=${rakutenId}`;
-  const proxyUrl = `/.netlify/functions/rakutenProxy?url=${encodeURIComponent(targetUrl)}`;
+  const proxyUrl = `https://nasumid-p.netlify.app/.netlify/functions/rakutenProxy?url=${encodeURIComponent(targetUrl)}`;
   try {
     const response = await fetch(proxyUrl);
     if (!response.ok) throw new Error('Proxy network error');
@@ -608,6 +608,19 @@ function renderMarketMetricContent() {
             この料金提案は、市場の予約可能状況を基にした参考値です。自ホテルの残室数、予約進捗、曜日、イベント、競合料金を確認したうえで最終判断してください。
           </p>
         </div>
+
+        <div style="margin-top: 24px; text-align: center;">
+          <button class="mr-ai-btn" onclick="fetchAIAdvice()">🤖 AIに戦略を相談する (口コミトレンド分析付)</button>
+        </div>
+        
+        <div id="mr-ai-result-box" style="display: none; margin-top: 20px; padding: 20px; background: linear-gradient(145deg, #f0fdf4, #f8fafc); border: 1.5px solid #22c55e; border-radius: var(--radius-sm); box-shadow: var(--shadow-sm); text-align: left;">
+          <h4 style="color: #15803d; margin-top: 0; margin-bottom: 16px; font-size: 15px;"><i class="fas fa-robot"></i> AI戦略アドバイザー</h4>
+          <div id="mr-ai-loading" style="text-align: center; color: #16a34a; font-size: 14px; padding: 20px 0;">
+            <i class="fas fa-circle-notch fa-spin fa-2x" style="margin-bottom:10px;"></i><br>
+            市場データと競合の最新口コミを分析しています...（約10〜15秒）
+          </div>
+          <div id="mr-ai-content" style="font-size: 13.5px; line-height: 1.7; color: #334155; display: none;"></div>
+        </div>
       </div>`;
       break;
 
@@ -636,3 +649,54 @@ window.addEventListener('click', (e) => {
     closeSpecModal();
   }
 });
+
+// ==========================================
+// AIアドバイザー呼び出し
+// ==========================================
+async function fetchAIAdvice() {
+  const resultBox = document.getElementById('mr-ai-result-box');
+  const loading = document.getElementById('mr-ai-loading');
+  const content = document.getElementById('mr-ai-content');
+  const btn = document.querySelector('.mr-ai-btn');
+
+  if (!AppState.currentViewData || !resultBox) return;
+
+  resultBox.style.display = 'block';
+  loading.style.display = 'block';
+  content.style.display = 'none';
+  if (btn) btn.disabled = true;
+
+  try {
+    const response = await fetch('https://nasumid-p.netlify.app/.netlify/functions/aiAdvisor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketData: AppState.currentViewData })
+    });
+
+    if (!response.ok) {
+      throw new Error(`エラーが発生しました: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+
+    let htmlContent = data.advice
+      .replace(/### (.*)/g, '<h5 style="color:#16a34a; font-size:15px; margin: 16px 0 8px 0; border-bottom:1px solid #dcfce7; padding-bottom:4px;">$1</h5>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#0f172a;">$1</strong>')
+      .replace(/\n\n/g, '</p><p style="margin-bottom:12px;">')
+      .replace(/\n- (.*)/g, '<li style="margin-left: 16px; margin-bottom: 4px;">$1</li>');
+    
+    htmlContent = `<p style="margin-top:0;">${htmlContent}</p>`;
+    
+    content.innerHTML = htmlContent;
+    loading.style.display = 'none';
+    content.style.display = 'block';
+
+  } catch (error) {
+    loading.style.display = 'none';
+    content.style.display = 'block';
+    content.innerHTML = `<p style="color: #dc2626;"><strong>取得失敗:</strong><br>${error.message}<br>※Netlifyの環境変数（GEMINI_API_KEY）が正しく設定されているか確認してください。</p>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
