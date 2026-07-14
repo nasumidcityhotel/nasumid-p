@@ -7,6 +7,7 @@ const COMPETITOR_HOTELS = [
   { id: 'routein_nishinasuno', name: 'ルートイン西那須野', category: 'direct', rakutenId: '27988' },
   { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', category: 'direct', rakutenId: '143534' },
   { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', category: 'direct', rakutenId: '181673' },
+  { id: 'station_hotel', name: '那須塩原ステーションホテル', category: 'direct', rakutenId: '28612' },
   { id: 'nasu_marronnier', name: '那須マロニエホテル', category: 'reference', rakutenId: '163533' },
   { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '14580' }
 ];
@@ -112,21 +113,48 @@ async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
     const json = await response.json();
     const html = json.contents;
     
+    let status = 'unknown';
+    let vacantCount = 0;
+    let actualLowestPrice = null;
+
     // 空室件数（totalResults）を取得
     const match = html.match(/"totalResults":\[(\d+)\]/);
     if (match && match[1]) {
-      const vacantCount = parseInt(match[1], 10);
-      return { status: vacantCount === 0 ? 'unavailable' : 'available', vacantCount: vacantCount };
+      vacantCount = parseInt(match[1], 10);
+      status = vacantCount === 0 ? 'unavailable' : 'available';
+    } else if (html.includes('ご指定の条件に合うプランがありません') || html.includes('空室がありません')) {
+      status = 'unavailable';
+    } else {
+      // 判定不能時はとりあえず available (フォールバック)
+      status = 'available';
+      vacantCount = 5;
     }
-    // "totalResults" がマッチしなかった場合のチェック
-    if (html.includes('ご指定の条件に合うプランがありません') || html.includes('空室がありません')) {
-      return { status: 'unavailable', vacantCount: 0 };
+
+    if (status === 'available') {
+      const prices = [];
+      // 1. "X,XXX円" または "XX,XXX円" の表記を抽出
+      const priceRegex = /([1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{3,})\s*円/g;
+      let pMatch;
+      while ((pMatch = priceRegex.exec(html)) !== null) {
+        const pNum = parseInt(pMatch[1].replace(/,/g, ''), 10);
+        if (pNum >= 3000 && pNum <= 100000) prices.push(pNum);
+      }
+      // 2. JSON内の "price": 8500 のような表記を抽出
+      const jsonPriceRegex = /"price"\s*:\s*([1-9][0-9]{3,5})/g;
+      while ((pMatch = jsonPriceRegex.exec(html)) !== null) {
+        const pNum = parseInt(pMatch[1], 10);
+        if (pNum >= 3000 && pNum <= 100000) prices.push(pNum);
+      }
+      
+      if (prices.length > 0) {
+        actualLowestPrice = Math.min(...prices);
+      }
     }
-    // html構造変更や判定不能時はfallback
-    return { status: 'available', vacantCount: 5 };
+
+    return { status, vacantCount, actualLowestPrice };
   } catch (e) {
     console.warn(`Failed to fetch availability for hotel ${rakutenId}:`, e);
-    return { status: 'unknown', vacantCount: 0 };
+    return { status: 'unknown', vacantCount: 0, actualLowestPrice: null };
   }
 }
 
@@ -162,7 +190,7 @@ async function getMarketResearchData(dateStr) {
 
   // 価格推測用ベース
   const baseMarkup = (isWeekend ? 2000 : 0) + (isHolidaySeason ? 3500 : 0) + (ev ? ev.coeff * 3000 - 3000 : 0) + (seed * 10);
-  const basePrices = { toyoko_nasushiobara: 6500, routein_nishinasuno: 7200, routein_2nd_nishinasuno: 7000, north_in: 5800, nasu_marronnier: 8500, nogi_onsen: 9500 };
+  const basePrices = { toyoko_nasushiobara: 6500, routein_nishinasuno: 7200, routein_2nd_nishinasuno: 7000, north_in: 5800, station_hotel: 6800, nasu_marronnier: 8500, nogi_onsen: 9500 };
 
   // 並列フェッチ
   let scrapingResults = {};
@@ -171,8 +199,8 @@ async function getMarketResearchData(dateStr) {
       const res = await fetchIndividualHotelAvailability(hotel.rakutenId, year, month, day);
       scrapingResults[hotel.id] = res;
     });
-    // 8秒タイムアウト
-    const timeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), 8000));
+    // 10秒タイムアウトに変更（スクレイピングのため少し長め）
+    const timeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), 10000));
     await Promise.race([Promise.all(promises), timeout]);
   } catch (error) {
     console.warn('Real-time scraping warning:', error);
@@ -182,24 +210,16 @@ async function getMarketResearchData(dateStr) {
   
   // 各ホテルのデータ生成
   const hotels = COMPETITOR_HOTELS.map((hotel, idx) => {
-    let base = basePrices[hotel.id] || 6000;
-    let markup = baseMarkup;
-    if (hotel.category === 'reference') markup = baseMarkup * 1.3;
 
-    // 予約可否ステータス判定
+    // 予約可否ステータス判定と実価格の取得
     let resStatus = 'unknown';
+    let lowestPrice = null;
+
     if (scrapingResults[hotel.id] && scrapingResults[hotel.id].status !== 'unknown') {
       resStatus = scrapingResults[hotel.id].status;
-    } else {
-      // 取得失敗時のフォールバックシミュレーション（API制限時など）
-      const fullChance = (isWeekend ? 0.35 : 0.08) + (isHolidaySeason ? 0.4 : 0) + (ev ? 0.3 : 0);
-      const isFull = ((seed + idx * 13) % 100) < (fullChance * 100);
-      resStatus = isFull ? 'unavailable' : 'available';
-    }
-
-    let lowestPrice = null;
-    if (resStatus === 'available') {
-      lowestPrice = Math.floor((base + markup) / 100) * 100;
+      if (scrapingResults[hotel.id].actualLowestPrice !== undefined && scrapingResults[hotel.id].actualLowestPrice !== null) {
+        lowestPrice = scrapingResults[hotel.id].actualLowestPrice;
+      }
     }
 
     // 前回データとの比較計算
@@ -504,10 +524,16 @@ function renderMarketMetricContent() {
 
           let priceStr = '予約不可';
           let diffBadge = '';
-          if (h.lowestPrice !== null) {
-            priceStr = `¥${h.lowestPrice.toLocaleString()}`;
-            if (h.priceDifference > 0) diffBadge = `<span style="color:#dc2626; font-size:11px;">(前回比 +¥${h.priceDifference.toLocaleString()})</span>`;
-            if (h.priceDifference < 0) diffBadge = `<span style="color:#16a34a; font-size:11px;">(前回比 ¥${h.priceDifference.toLocaleString()})</span>`;
+          if (h.status === 'available') {
+            if (h.lowestPrice !== null) {
+              priceStr = `¥${h.lowestPrice.toLocaleString()}`;
+              if (h.priceDifference > 0) diffBadge = `<span style="color:#dc2626; font-size:11px;">(前回比 +¥${h.priceDifference.toLocaleString()})</span>`;
+              if (h.priceDifference < 0) diffBadge = `<span style="color:#16a34a; font-size:11px;">(前回比 ¥${h.priceDifference.toLocaleString()})</span>`;
+            } else {
+              priceStr = '<span style="font-size:12px; color:#64748b;">価格不明(取得不可)</span>';
+            }
+          } else if (h.status === 'unknown') {
+            priceStr = '-';
           }
 
           let prevStr = h.previousStatus ? (h.previousStatus === 'available' ? '予約可能' : '予約不可') : '履歴なし';
@@ -590,3 +616,24 @@ function renderMarketMetricContent() {
       container.innerHTML = '<p class="text-muted">指標を選択してください。</p>';
   }
 }
+
+// ==========================================
+// モーダル操作
+// ==========================================
+function openSpecModal() {
+  const modal = document.getElementById('mr-spec-modal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeSpecModal() {
+  const modal = document.getElementById('mr-spec-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+// モーダルの外側をクリックしたら閉じる
+window.addEventListener('click', (e) => {
+  const modal = document.getElementById('mr-spec-modal');
+  if (e.target === modal) {
+    closeSpecModal();
+  }
+});
