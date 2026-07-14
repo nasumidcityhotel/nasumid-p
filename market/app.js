@@ -134,19 +134,17 @@ async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
     }
 
     if (status === 'available') {
-      const prices = [];
-      // 1. "X,XXX円" または "XX,XXX円" の表記を抽出
+      // 検索フォームの <select> 内にある「1,000円」「3,000円」などのオプション文字列を除去
+      const cleanHtml = html.replace(/<select[\s\S]*?<\/select>/gi, '');
       const priceRegex = /([1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{3,})\s*円/g;
-      let pMatch;
-      while ((pMatch = priceRegex.exec(html)) !== null) {
-        const pNum = parseInt(pMatch[1].replace(/,/g, ''), 10);
-        if (pNum >= 3000 && pNum <= 100000) prices.push(pNum);
-      }
-      // 2. JSON内の "price": 8500 のような表記を抽出
-      const jsonPriceRegex = /"price"\s*:\s*([1-9][0-9]{3,5})/g;
-      while ((pMatch = jsonPriceRegex.exec(html)) !== null) {
-        const pNum = parseInt(pMatch[1], 10);
-        if (pNum >= 3000 && pNum <= 100000) prices.push(pNum);
+      const prices = [];
+      let m;
+      while ((m = priceRegex.exec(cleanHtml)) !== null) {
+        const val = parseInt(m[1].replace(/,/g, ''), 10);
+        // ホテル価格として現実的な下限（3,500円以上）に設定し、割引クーポン名などのノイズを除外
+        if (val >= 3500 && val < 100000) {
+          prices.push(val);
+        }
       }
       
       if (prices.length > 0) {
