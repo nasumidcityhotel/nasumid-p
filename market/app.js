@@ -114,77 +114,17 @@ async function fetchIndividualHotelAvailability(rakutenId, year, month, day) {
   const m2 = checkoutDate.getMonth() + 1;
   const d2 = checkoutDate.getDate();
   
-  const targetUrl = `https://search.travel.rakuten.co.jp/ds/vacant/searchVacant?f_hyoji=3&f_flg=vacant&f_otona_su=1&f_heya_su=1&f_nen1=${year}&f_tuki1=${month}&f_hi1=${day}&f_nen2=${y2}&f_tuki2=${m2}&f_hi2=${d2}&f_no=${rakutenId}`;
-  const proxyUrl = `https://nasumid-p.netlify.app/.netlify/functions/rakutenProxy`;
+  const apiUrl = `/.netlify/functions/scrape-rakuten?rakutenId=${rakutenId}&year=${year}&month=${month}&day=${day}`;
   try {
-    const response = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetUrl })
-    });
-    if (!response.ok) throw new Error('Proxy network error');
-    const html = await response.text();
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error('API network error');
     
-    let status = 'unknown';
-    let vacantCount = 0;
-    let actualLowestPrice = null;
-
-    // 空室件数（totalResults）を取得
-    const match = html.match(/"totalResults":\[(\d+)\]/);
-    if (match && match[1]) {
-      vacantCount = parseInt(match[1], 10);
-      status = vacantCount === 0 ? 'unavailable' : 'available';
-    } else if (html.includes('ご指定の条件に合うプランがありません') || html.includes('空室がありません')) {
-      status = 'unavailable';
-    } else {
-      // 判定不能時はとりあえず available (フォールバック)
-      status = 'available';
-      vacantCount = 5;
-    }
-
-    if (status === 'available') {
-      // 「料金」に関するクラス名（htlPrice, dp_price, price 等）を持つタグの中にある金額を狙って抽出
-      const priceRegex = /class="[^"]*(?:price|charge)[^"]*"[^>]*>.*?([1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{3,}).*?(?:円|<\/)/gi;
-      // 予備として、JSONデータ内の価格を探す
-      const jsonPriceRegex = /"(?:hotelMinCharge|price|roomPrice)"\s*:\s*(\d{4,6})/g;
-      
-      const prices = [];
-      let m;
-      // 1. HTMLタグからの抽出
-      while ((m = priceRegex.exec(html)) !== null) {
-        const val = parseInt(m[1].replace(/,/g, ''), 10);
-        if (val >= 3500 && val < 100000) prices.push(val);
-      }
-      // 2. JSONデータからの抽出
-      while ((m = jsonPriceRegex.exec(html)) !== null) {
-        const val = parseInt(m[1], 10);
-        if (val >= 3500 && val < 100000) prices.push(val);
-      }
-      // 3. フォールバック: 汎用的な「◯,◯◯◯円」を探す（セレクトボックスやクーポン等のノイズを除外したHTML上で）
-      if (prices.length === 0) {
-        const cleanHtml = html
-          .replace(/<select[\s\S]*?<\/select>/gi, '')
-          .replace(/クーポン/g, '');
-        const fallbackRegex = /([1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{3,})\s*円/g;
-        let fm;
-        while ((fm = fallbackRegex.exec(cleanHtml)) !== null) {
-          const val = parseInt(fm[1].replace(/,/g, ''), 10);
-          if (val >= 3500 && val < 100000) prices.push(val);
-        }
-      }
-      
-      if (prices.length > 0) {
-        actualLowestPrice = Math.min(...prices);
-      } else {
-        // ★ 楽天のセキュリティ（WAF/Bot対策）により価格が抽出できない場合のデモ用フォールバック
-        console.warn(`Hotel ${rakutenId}: 楽天トラベルのセキュリティブロックにより価格取得不可。デモデータを適用します。`);
-        actualLowestPrice = rakutenId === '186255' ? 8200 : 6500 + (parseInt(rakutenId.substring(0,4)) || 0) % 5000;
-        status = 'available';
-        vacantCount = 5;
-      }
-    }
-
-    return { status, vacantCount, actualLowestPrice };
+    const data = await response.json();
+    return {
+      status: data.status || 'unknown',
+      vacantCount: data.vacantCount || 0,
+      actualLowestPrice: data.actualLowestPrice || null
+    };
   } catch (e) {
     console.warn(`Failed to fetch availability for hotel ${rakutenId}:`, e);
     return { status: 'unknown', vacantCount: 0, actualLowestPrice: null };
