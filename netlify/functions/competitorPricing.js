@@ -92,7 +92,12 @@ exports.handler = async function(event, context) {
       try {
         const response = await fetch(url);
         if (!response.ok) {
-          throw new Error(`API error status: ${response.status}`);
+          let errDetail = '';
+          try {
+            const errData = await response.json();
+            errDetail = errData.error_description || errData.error || '';
+          } catch (e) {}
+          throw new Error(`API error status: ${response.status}${errDetail ? ' (' + errDetail + ')' : ''}`);
         }
         const data = await response.json();
 
