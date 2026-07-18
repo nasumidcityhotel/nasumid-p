@@ -3,13 +3,13 @@
 // ==========================================
 
 const COMPETITOR_HOTELS = [
-  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', category: 'direct', rakutenId: '186255', url: 'https://travel.rakuten.co.jp/HOTEL/186255/186255.html' },
-  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', category: 'direct', rakutenId: '27988', url: 'https://travel.rakuten.co.jp/HOTEL/27988/27988.html' },
-  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', category: 'direct', rakutenId: '143534', url: 'https://travel.rakuten.co.jp/HOTEL/143534/143534.html' },
+  { id: 'toyoko_nasushiobara', name: '東横INN那須塩原駅西口', category: 'direct', rakutenId: '189725', url: 'https://travel.rakuten.co.jp/HOTEL/189725/189725.html' },
+  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', category: 'direct', rakutenId: '14768', url: 'https://travel.rakuten.co.jp/HOTEL/14768/14768.html' },
+  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', category: 'direct', rakutenId: '147413', url: 'https://travel.rakuten.co.jp/HOTEL/147413/147413.html' },
   { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', category: 'direct', rakutenId: '181673', url: 'https://travel.rakuten.co.jp/HOTEL/181673/181673.html' },
-  { id: 'station_hotel', name: '那須塩原ステーションホテル', category: 'direct', rakutenId: '28612', url: 'https://travel.rakuten.co.jp/HOTEL/28612/28612.html' },
-  { id: 'nasu_marronnier', name: '那須マロニエホテル', category: 'reference', rakutenId: '163533', url: 'https://travel.rakuten.co.jp/HOTEL/163533/163533.html' },
-  { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '27906', url: 'https://travel.rakuten.co.jp/HOTEL/27906/27906.html' }
+  { id: 'station_hotel', name: '那須塩原ステーションホテル', category: 'direct', rakutenId: '14352', url: 'https://travel.rakuten.co.jp/HOTEL/14352/14352.html' },
+  { id: 'nasu_marronnier', name: '那須マロニエホテル', category: 'reference', rakutenId: '140138', url: 'https://travel.rakuten.co.jp/HOTEL/140138/140138.html' },
+  { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '161474', url: 'https://travel.rakuten.co.jp/HOTEL/161474/161474.html' }
 ];
 
 const METRICS = [
