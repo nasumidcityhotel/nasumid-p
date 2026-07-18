@@ -85,12 +85,22 @@ exports.handler = async function(event, context) {
       // 楽天APIの過剰リクエストによる429エラーを回避するためにディレイを入れる
       await sleep(300);
 
-      // 楽天トラベル空室検索APIの呼び出し
-      const apiEndpoint = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426`;
-      const url = `${apiEndpoint}?applicationId=${appId}&format=json&checkinDate=${checkinDateStr}&checkoutDate=${checkoutDateStr}&adultNum=1&roomNum=1&hotelNo=${hotel.rakutenId}`;
+      const accessKey = process.env.RAKUTEN_ACCESS_KEY || '';
+      const affiliateId = process.env.RAKUTEN_AFFILIATE_ID || '';
+
+      // 楽天トラベル空室検索APIの呼び出し（2026年以降の新仕様）
+      const apiEndpoint = `https://openapi.rakuten.co.jp/engine/api/Travel/VacantHotelSearch/20170426`;
+      let url = `${apiEndpoint}?applicationId=${appId}&accessKey=${accessKey}&format=json&checkinDate=${checkinDateStr}&checkoutDate=${checkoutDateStr}&adultNum=1&roomNum=1&hotelNo=${hotel.rakutenId}`;
+      if (affiliateId) {
+        url += `&affiliateId=${affiliateId}`;
+      }
 
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          headers: {
+            'Referer': 'https://nasumid-p.netlify.app/'
+          }
+        });
         if (!response.ok) {
           let errDetail = '';
           try {
