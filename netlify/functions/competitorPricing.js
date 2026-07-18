@@ -113,13 +113,27 @@ exports.handler = async function(event, context) {
             const errData = await response.json();
             errDetail = errData.error_description || errData.error || '';
           } catch (e) {}
+
+          // 楽天API新仕様で「空室がない」場合は 404 (Data Not Found) が返るため、空室なしとして扱う
+          if (response.status === 404 || errDetail === 'Data Not Found' || errDetail === 'NotFound') {
+            results.push({
+              id: hotel.id,
+              name: hotel.name,
+              rakutenId: hotel.rakutenId,
+              status: 'unavailable',
+              vacantCount: 0,
+              price: null
+            });
+            continue;
+          }
+
           throw new Error(`API error status: ${response.status}${errDetail ? ' (' + errDetail + ')' : ''}`);
         }
         const data = await response.json();
 
         if (data.error) {
-          // 「空室が見つからない（満室）」場合は NotFound (not_found) エラーが返るため、空室なしとして扱う
-          if (data.error === 'not_found' || data.error_description === 'NotFound' || data.error === 'NotFound') {
+          // 旧仕様またはその他のエラーレスポンスにおける空室なし判定
+          if (data.error === 'not_found' || data.error_description === 'NotFound' || data.error === 'NotFound' || data.error === 'Data Not Found') {
             results.push({
               id: hotel.id,
               name: hotel.name,
