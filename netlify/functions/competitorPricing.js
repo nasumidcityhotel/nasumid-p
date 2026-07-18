@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+// Node.js 18+ のグローバル fetch を使用するため node-fetch は不要です
 
 // 対象競合ホテル定義
 const COMPETITOR_HOTELS = [
