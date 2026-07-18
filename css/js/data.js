@@ -48,13 +48,16 @@ const COMPETITOR_HOTELS = [
 ];
 
 // ===== アプリケーション状態 =====
+const today = new Date();
+const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
 const AppState = {
   settings: null,
   proposals: [],
   history: [],
   manualData: [],
   marketResearchData: [],
-  selectedMarketDate: '2026-07-22',
+  selectedMarketDate: todayStr,
   selectedMarketMetric: 'prices',
   currentProposalId: null,
   calendarMonth: new Date(),

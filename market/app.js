@@ -19,8 +19,11 @@ const METRICS = [
   { id: 'stats', label: '分析サマリー', icon: '📋' }
 ];
 
+const today = new Date();
+const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
 const AppState = {
-  selectedMarketDate: '2026-07-22',
+  selectedMarketDate: todayStr,
   selectedMarketMetric: 'prices',
   marketResearchHistory: [], // v6のデータ構造（推移を保存）
   settings: {
