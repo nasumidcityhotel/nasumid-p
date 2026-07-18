@@ -2,12 +2,13 @@
 
 // 対象競合ホテル定義
 const COMPETITOR_HOTELS = [
-  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', rakutenId: '186255', basePrice: 7200 },
-  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', rakutenId: '27988', basePrice: 7800 },
-  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', rakutenId: '143534', basePrice: 7400 },
-  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', rakutenId: '181673', basePrice: 6500 },
-  { id: 'station_hotel', name: '那須塩原ステーションホテル', rakutenId: '28612', basePrice: 6800 },
-  { id: 'nasu_marronnier', name: '那須マロニエホテル', rakutenId: '163533', basePrice: 8500 }
+  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', rakutenId: '186255', basePrice: 7200, url: 'https://travel.rakuten.co.jp/HOTEL/186255/' },
+  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', rakutenId: '27988', basePrice: 7800, url: 'https://travel.rakuten.co.jp/HOTEL/27988/' },
+  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', rakutenId: '143534', basePrice: 7400, url: 'https://travel.rakuten.co.jp/HOTEL/143534/' },
+  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', rakutenId: '181673', basePrice: 6500, url: 'https://travel.rakuten.co.jp/HOTEL/181673/' },
+  { id: 'station_hotel', name: '那須塩原ステーションホテル', rakutenId: '28612', basePrice: 6800, url: 'https://travel.rakuten.co.jp/HOTEL/28612/' },
+  { id: 'nasu_marronnier', name: '那須マロニエホテル', rakutenId: '163533', basePrice: 8500, url: 'https://travel.rakuten.co.jp/HOTEL/163533/' },
+  { id: 'nogi_onsen', name: '乃木温泉ホテル', rakutenId: '27906', basePrice: 9500, url: 'https://travel.rakuten.co.jp/HOTEL/27906/' }
 ];
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -47,10 +48,13 @@ exports.handler = async function(event, context) {
 
   console.log(`Researching date: ${checkinDateStr}, DemoMode: ${isDemoMode}`);
 
-  // チェックアウト日の計算 (チェックイン日 + 1日)
-  const checkinDate = new Date(checkinDateStr);
-  const checkoutDate = new Date(checkinDate.getTime() + 24 * 60 * 60 * 1000);
-  const checkoutDateStr = checkoutDate.toISOString().slice(0, 10);
+  // チェックアウト日の計算 (タイムゾーンのズレを防ぐため、文字列をパースして日付を加算)
+  const parts = checkinDateStr.split('-');
+  const checkinYear = parseInt(parts[0], 10);
+  const checkinMonth = parseInt(parts[1], 10) - 1;
+  const checkinDay = parseInt(parts[2], 10);
+  const checkoutDate = new Date(checkinYear, checkinMonth, checkinDay + 1);
+  const checkoutDateStr = `${checkoutDate.getFullYear()}-${String(checkoutDate.getMonth() + 1).padStart(2, '0')}-${String(checkoutDate.getDate()).padStart(2, '0')}`;
 
   const results = [];
 
@@ -77,13 +81,14 @@ exports.handler = async function(event, context) {
         id: hotel.id,
         name: hotel.name,
         rakutenId: hotel.rakutenId,
+        url: hotel.url,
         status,
         vacantCount,
         price: actualPrice
       });
     } else {
-      // 楽天APIの過剰リクエストによる429エラーを回避するためにディレイを入れる
-      await sleep(300);
+      // 楽天APIの過剰リクエストによる429エラーを回避するためにディレイを延長（1.1秒）
+      await sleep(1100);
 
       const accessKey = process.env.RAKUTEN_ACCESS_KEY || '';
       const affiliateId = process.env.RAKUTEN_AFFILIATE_ID || '';
@@ -120,6 +125,7 @@ exports.handler = async function(event, context) {
               id: hotel.id,
               name: hotel.name,
               rakutenId: hotel.rakutenId,
+              url: hotel.url,
               status: 'unavailable',
               vacantCount: 0,
               price: null
@@ -138,6 +144,7 @@ exports.handler = async function(event, context) {
               id: hotel.id,
               name: hotel.name,
               rakutenId: hotel.rakutenId,
+              url: hotel.url,
               status: 'unavailable',
               vacantCount: 0,
               price: null
@@ -179,6 +186,7 @@ exports.handler = async function(event, context) {
             id: hotel.id,
             name: hotel.name,
             rakutenId: hotel.rakutenId,
+            url: hotel.url,
             status: 'available',
             vacantCount: prices.length || 3,
             price: minCharge
@@ -189,6 +197,7 @@ exports.handler = async function(event, context) {
             id: hotel.id,
             name: hotel.name,
             rakutenId: hotel.rakutenId,
+            url: hotel.url,
             status: 'unavailable',
             vacantCount: 0,
             price: null
@@ -201,6 +210,7 @@ exports.handler = async function(event, context) {
           id: hotel.id,
           name: hotel.name,
           rakutenId: hotel.rakutenId,
+          url: hotel.url,
           status: 'unknown',
           vacantCount: 0,
           price: null,

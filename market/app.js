@@ -9,7 +9,7 @@ const COMPETITOR_HOTELS = [
   { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', category: 'direct', rakutenId: '181673' },
   { id: 'station_hotel', name: '那須塩原ステーションホテル', category: 'direct', rakutenId: '28612' },
   { id: 'nasu_marronnier', name: '那須マロニエホテル', category: 'reference', rakutenId: '163533' },
-  { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '14580' }
+  { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '27906' }
 ];
 
 const METRICS = [
@@ -597,7 +597,7 @@ function renderMarketMetricContent() {
             <div class="mr-hotel-details" style="background:#f1f5f9; padding:10px; border-radius:6px; font-size: 11px;">
               <p style="margin:0 0 4px 0;">前回状況: ${prevStr} ${h.previousPrice ? `(¥${h.previousPrice.toLocaleString()})` : ''}</p>
               <p style="margin:0 0 4px 0;">最終確認: ${checkedStr}</p>
-              <p style="margin:0;">OTA: ${h.otaName}</p>
+              <p style="margin:0;">OTA: ${h.otaName} ${h.url ? `<a href="${h.url}" target="_blank" style="color: var(--primary); text-decoration: underline; font-weight: bold; margin-left: 8px;"><i class="fas fa-external-link-alt"></i> 楽天トラベルで見る</a>` : ''}</p>
             </div>
           </div>`;
         }).join('')}
