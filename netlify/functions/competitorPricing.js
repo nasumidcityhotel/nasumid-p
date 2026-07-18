@@ -10,6 +10,8 @@ const COMPETITOR_HOTELS = [
   { id: 'nasu_marronnier', name: '那須マロニエホテル', rakutenId: '163533', basePrice: 8500 }
 ];
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 exports.handler = async function(event, context) {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -80,6 +82,9 @@ exports.handler = async function(event, context) {
         price: actualPrice
       });
     } else {
+      // 楽天APIの過剰リクエストによる429エラーを回避するためにディレイを入れる
+      await sleep(300);
+
       // 楽天トラベル空室検索APIの呼び出し
       const apiEndpoint = `https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426`;
       const url = `${apiEndpoint}?applicationId=${appId}&format=json&checkinDate=${checkinDateStr}&checkoutDate=${checkoutDateStr}&adultNum=1&roomNum=1&hotelNo=${hotel.rakutenId}`;
@@ -92,6 +97,18 @@ exports.handler = async function(event, context) {
         const data = await response.json();
 
         if (data.error) {
+          // 「空室が見つからない（満室）」場合は NotFound (not_found) エラーが返るため、空室なしとして扱う
+          if (data.error === 'not_found' || data.error_description === 'NotFound' || data.error === 'NotFound') {
+            results.push({
+              id: hotel.id,
+              name: hotel.name,
+              rakutenId: hotel.rakutenId,
+              status: 'unavailable',
+              vacantCount: 0,
+              price: null
+            });
+            continue;
+          }
           throw new Error(`API returned error: ${data.error_description || data.error}`);
         }
 
@@ -151,7 +168,8 @@ exports.handler = async function(event, context) {
           rakutenId: hotel.rakutenId,
           status: 'unknown',
           vacantCount: 0,
-          price: null
+          price: null,
+          errorMessage: err.message
         });
       }
     }
