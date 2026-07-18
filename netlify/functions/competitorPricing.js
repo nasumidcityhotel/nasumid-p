@@ -2,13 +2,13 @@
 
 // 対象競合ホテル定義
 const COMPETITOR_HOTELS = [
-  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', rakutenId: '186255', basePrice: 7200, url: 'https://travel.rakuten.co.jp/HOTEL/186255/186255.html' },
-  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', rakutenId: '27988', basePrice: 7800, url: 'https://travel.rakuten.co.jp/HOTEL/27988/27988.html' },
-  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', rakutenId: '143534', basePrice: 7400, url: 'https://travel.rakuten.co.jp/HOTEL/143534/143534.html' },
+  { id: 'toyoko_nasushiobara', name: '東横INN那須塩原駅西口', rakutenId: '189725', basePrice: 7200, url: 'https://travel.rakuten.co.jp/HOTEL/189725/189725.html' },
+  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', rakutenId: '14768', basePrice: 7800, url: 'https://travel.rakuten.co.jp/HOTEL/14768/14768.html' },
+  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', rakutenId: '147413', basePrice: 7400, url: 'https://travel.rakuten.co.jp/HOTEL/147413/147413.html' },
   { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', rakutenId: '181673', basePrice: 6500, url: 'https://travel.rakuten.co.jp/HOTEL/181673/181673.html' },
-  { id: 'station_hotel', name: '那須塩原ステーションホテル', rakutenId: '28612', basePrice: 6800, url: 'https://travel.rakuten.co.jp/HOTEL/28612/28612.html' },
-  { id: 'nasu_marronnier', name: '那須マロニエホテル', rakutenId: '163533', basePrice: 8500, url: 'https://travel.rakuten.co.jp/HOTEL/163533/163533.html' },
-  { id: 'nogi_onsen', name: '乃木温泉ホテル', rakutenId: '27906', basePrice: 9500, url: 'https://travel.rakuten.co.jp/HOTEL/27906/27906.html' }
+  { id: 'station_hotel', name: '那須塩原ステーションホテル', rakutenId: '14352', basePrice: 6800, url: 'https://travel.rakuten.co.jp/HOTEL/14352/14352.html' },
+  { id: 'nasu_marronnier', name: '那須マロニエホテル', rakutenId: '140138', basePrice: 8500, url: 'https://travel.rakuten.co.jp/HOTEL/140138/140138.html' },
+  { id: 'nogi_onsen', name: '乃木温泉ホテル', rakutenId: '161474', basePrice: 9500, url: 'https://travel.rakuten.co.jp/HOTEL/161474/161474.html' }
 ];
 
 // 環境変数が読み込めなかった場合のハードコードフォールバック（赤沢温泉と同じ方式）
