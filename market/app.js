@@ -3,13 +3,13 @@
 // ==========================================
 
 const COMPETITOR_HOTELS = [
-  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', category: 'direct', rakutenId: '186255' },
-  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', category: 'direct', rakutenId: '27988' },
-  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', category: 'direct', rakutenId: '143534' },
-  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', category: 'direct', rakutenId: '181673' },
-  { id: 'station_hotel', name: '那須塩原ステーションホテル', category: 'direct', rakutenId: '28612' },
-  { id: 'nasu_marronnier', name: '那須マロニエホテル', category: 'reference', rakutenId: '163533' },
-  { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '27906' }
+  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', category: 'direct', rakutenId: '186255', url: 'https://travel.rakuten.co.jp/HOTEL/186255/186255.html' },
+  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', category: 'direct', rakutenId: '27988', url: 'https://travel.rakuten.co.jp/HOTEL/27988/27988.html' },
+  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', category: 'direct', rakutenId: '143534', url: 'https://travel.rakuten.co.jp/HOTEL/143534/143534.html' },
+  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', category: 'direct', rakutenId: '181673', url: 'https://travel.rakuten.co.jp/HOTEL/181673/181673.html' },
+  { id: 'station_hotel', name: '那須塩原ステーションホテル', category: 'direct', rakutenId: '28612', url: 'https://travel.rakuten.co.jp/HOTEL/28612/28612.html' },
+  { id: 'nasu_marronnier', name: '那須マロニエホテル', category: 'reference', rakutenId: '163533', url: 'https://travel.rakuten.co.jp/HOTEL/163533/163533.html' },
+  { id: 'nogi_onsen', name: '乃木温泉ホテル', category: 'reference', rakutenId: '27906', url: 'https://travel.rakuten.co.jp/HOTEL/27906/27906.html' }
 ];
 
 const METRICS = [
@@ -284,7 +284,7 @@ async function getMarketResearchData(dateStr) {
       guests: 1,
       rooms: 1,
       status: resStatus,
-      url: apiRes ? apiRes.url : null,
+      url: (apiRes && apiRes.url) || hotel.url || `https://travel.rakuten.co.jp/HOTEL/${hotel.rakutenId}/${hotel.rakutenId}.html`,
       errorMessage: apiRes ? apiRes.errorMessage : null,
       lowestPrice: lowestPrice,
       previousPrice: previousPrice,

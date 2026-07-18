@@ -2,39 +2,20 @@
 
 // 対象競合ホテル定義
 const COMPETITOR_HOTELS = [
-  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', rakutenId: '186255', basePrice: 7200, url: 'https://travel.rakuten.co.jp/HOTEL/186255/' },
-  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', rakutenId: '27988', basePrice: 7800, url: 'https://travel.rakuten.co.jp/HOTEL/27988/' },
-  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', rakutenId: '143534', basePrice: 7400, url: 'https://travel.rakuten.co.jp/HOTEL/143534/' },
-  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', rakutenId: '181673', basePrice: 6500, url: 'https://travel.rakuten.co.jp/HOTEL/181673/' },
-  { id: 'station_hotel', name: '那須塩原ステーションホテル', rakutenId: '28612', basePrice: 6800, url: 'https://travel.rakuten.co.jp/HOTEL/28612/' },
-  { id: 'nasu_marronnier', name: '那須マロニエホテル', rakutenId: '163533', basePrice: 8500, url: 'https://travel.rakuten.co.jp/HOTEL/163533/' },
-  { id: 'nogi_onsen', name: '乃木温泉ホテル', rakutenId: '27906', basePrice: 9500, url: 'https://travel.rakuten.co.jp/HOTEL/27906/' }
+  { id: 'toyoko_nasushiobara', name: '東横イン那須塩原駅西口', rakutenId: '186255', basePrice: 7200, url: 'https://travel.rakuten.co.jp/HOTEL/186255/186255.html' },
+  { id: 'routein_nishinasuno', name: 'ルートイン西那須野', rakutenId: '27988', basePrice: 7800, url: 'https://travel.rakuten.co.jp/HOTEL/27988/27988.html' },
+  { id: 'routein_2nd_nishinasuno', name: 'ルートイン第２西那須野', rakutenId: '143534', basePrice: 7400, url: 'https://travel.rakuten.co.jp/HOTEL/143534/143534.html' },
+  { id: 'north_in', name: 'ビジネスホテル那須高原ノースイン', rakutenId: '181673', basePrice: 6500, url: 'https://travel.rakuten.co.jp/HOTEL/181673/181673.html' },
+  { id: 'station_hotel', name: '那須塩原ステーションホテル', rakutenId: '28612', basePrice: 6800, url: 'https://travel.rakuten.co.jp/HOTEL/28612/28612.html' },
+  { id: 'nasu_marronnier', name: '那須マロニエホテル', rakutenId: '163533', basePrice: 8500, url: 'https://travel.rakuten.co.jp/HOTEL/163533/163533.html' },
+  { id: 'nogi_onsen', name: '乃木温泉ホテル', rakutenId: '27906', basePrice: 9500, url: 'https://travel.rakuten.co.jp/HOTEL/27906/27906.html' }
 ];
 
+// 環境変数が読み込めなかった場合のハードコードフォールバック（赤沢温泉と同じ方式）
+const WORKING_APP_ID = process.env.RAKUTEN_APP_ID || process.env.RAKUTEN_APPLICATION_ID || '057c911b-bec4-48af-8981-a94fc4f83c01';
+const WORKING_ACCESS_KEY = process.env.RAKUTEN_ACCESS_KEY || 'pk_ZLMBkyngWXsxZW7vyXskGPqKXis7RWMHjTY373SAuEv';
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-function parseHotelPrice(hotelData) {
-  let minCharge = null;
-  const basicInfo = hotelData.hotel[0].hotelBasicInfo;
-  const roomInfoArray = hotelData.hotel.slice(1);
-  const prices = [];
-
-  roomInfoArray.forEach(room => {
-    const charge = room.roomInfo[0].dailyCharge;
-    if (charge && charge.rakutenCharge) {
-      const val = parseInt(charge.rakutenCharge, 10);
-      if (val > 0) prices.push(val);
-    }
-  });
-
-  if (prices.length > 0) {
-    minCharge = Math.min(...prices);
-  } else if (basicInfo && basicInfo.hotelMinCharge) {
-    minCharge = parseInt(basicInfo.hotelMinCharge, 10);
-  }
-  
-  return { price: minCharge, vacantCount: prices.length || 3 };
-}
 
 exports.handler = async function(event, context) {
   if (event.httpMethod === 'OPTIONS') {
@@ -49,7 +30,7 @@ exports.handler = async function(event, context) {
     };
   }
 
-  // クエリまたはボディから日付を取得 (デフォルトは翌週の水曜日)
+  // クエリまたはボディから日付を取得
   let checkinDateStr = '';
   try {
     if (event.body) {
@@ -63,162 +44,182 @@ exports.handler = async function(event, context) {
   if (!checkinDateStr) {
     const defaultDate = new Date();
     defaultDate.setDate(defaultDate.getDate() + 7);
-    checkinDateStr = defaultDate.toISOString().slice(0, 10);
+    const y = defaultDate.getFullYear();
+    const m = String(defaultDate.getMonth() + 1).padStart(2, '0');
+    const d = String(defaultDate.getDate()).padStart(2, '0');
+    checkinDateStr = `${y}-${m}-${d}`;
   }
 
-  const appId = process.env.RAKUTEN_APP_ID || process.env.RAKUTEN_APPLICATION_ID;
-  const isDemoMode = !appId;
-
-  console.log(`Researching date: ${checkinDateStr}, DemoMode: ${isDemoMode}`);
-
-  // チェックアウト日の計算 (タイムゾーンのズレを防ぐため、文字列をパースして日付を加算)
+  // チェックアウト日の計算（タイムゾーンのズレを防ぐため文字列パース）
   const parts = checkinDateStr.split('-');
   const checkinYear = parseInt(parts[0], 10);
   const checkinMonth = parseInt(parts[1], 10) - 1;
   const checkinDay = parseInt(parts[2], 10);
-  const checkoutDate = new Date(checkinYear, checkinMonth, checkinDay + 1);
-  const checkoutDateStr = `${checkoutDate.getFullYear()}-${String(checkoutDate.getMonth() + 1).padStart(2, '0')}-${String(checkoutDate.getDate()).padStart(2, '0')}`;
+  const coDate = new Date(checkinYear, checkinMonth, checkinDay + 1);
+  const checkoutDateStr = `${coDate.getFullYear()}-${String(coDate.getMonth() + 1).padStart(2, '0')}-${String(coDate.getDate()).padStart(2, '0')}`;
+
+  console.log(`[competitorPricing] checkin=${checkinDateStr}, checkout=${checkoutDateStr}`);
+
+  const affiliateId = process.env.RAKUTEN_AFFILIATE_ID || '55c8d52a.2cf28d81.55c8d52b.fd1c1360';
+  const apiEndpoint = 'https://openapi.rakuten.co.jp/engine/api/Travel/VacantHotelSearch/20170426';
+  const hotelNos = COMPETITOR_HOTELS.map(h => h.rakutenId).join(',');
+
+  // ===================================================================
+  // 赤沢温泉と完全に同じAPI呼び出しパターン
+  // ページネーション付き一括検索
+  // ===================================================================
+  const fetchAllPages = async (adultNum) => {
+    let allHotels = [];
+    let page = 1;
+    let hasNextPage = true;
+
+    while (hasNextPage && page <= 8) {
+      const url = `${apiEndpoint}?applicationId=${WORKING_APP_ID}&accessKey=${WORKING_ACCESS_KEY}&format=json&hotelNo=${hotelNos}&checkinDate=${checkinDateStr}&checkoutDate=${checkoutDateStr}&adultNum=${adultNum}&searchPattern=1&hits=30&page=${page}&affiliateId=${affiliateId}`;
+
+      try {
+        const resp = await fetch(url, {
+          headers: {
+            'Referer': 'https://nasumid-p.netlify.app/',
+            'Origin': 'https://nasumid-p.netlify.app'
+          }
+        });
+
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json && json.hotels) {
+            allHotels = allHotels.concat(json.hotels);
+            const pagingInfo = json.pagingInfo;
+            if (pagingInfo && page < pagingInfo.pageCount) {
+              page++;
+              await sleep(1100);
+            } else {
+              hasNextPage = false;
+            }
+          } else {
+            hasNextPage = false;
+          }
+        } else {
+          hasNextPage = false;
+        }
+      } catch (e) {
+        console.warn(`[fetchAllPages] page ${page} error:`, e.message);
+        hasNextPage = false;
+      }
+    }
+
+    return allHotels;
+  };
 
   const results = [];
 
-  if (isDemoMode) {
-    // APIキーがない場合のデモ用フォールバック
-    // 曜日や日付のハッシュ値から決定論的に揺らぎをもたせた価格を生成する
-    for (const hotel of COMPETITOR_HOTELS) {
-      const checkinDateObj = new Date(checkinYear, checkinMonth, checkinDay);
-      const dayOfWeek = checkinDateObj.getDay(); // 0: 日, 6: 土
-      const isWeekend = dayOfWeek === 5 || dayOfWeek === 6; // 金土は高価格
-      const dayFactor = (checkinDateObj.getDate() % 5) * 300 - 600;
-      
-      let price = hotel.basePrice + dayFactor;
-      if (isWeekend) {
-        price = Math.round(price * 1.25);
-      }
-      
-      // 一定確率で「空室なし」をシミュレート
-      const hash = (checkinDateObj.getDate() + hotel.rakutenId.charCodeAt(0)) % 10;
-      const status = hash === 0 ? 'unavailable' : 'available';
-      const actualPrice = status === 'available' ? price : null;
-      const vacantCount = status === 'available' ? (hash % 8) + 1 : 0;
+  try {
+    // ステップ1: 大人1名で一括検索（ページネーション付き）
+    const hotels1 = await fetchAllPages(1);
+    console.log(`[competitorPricing] adultNum=1 found ${hotels1.length} hotel entries`);
 
-      results.push({
-        id: hotel.id,
-        name: hotel.name,
-        rakutenId: hotel.rakutenId,
-        url: hotel.url,
-        status,
-        vacantCount,
-        price: actualPrice
-      });
+    // ステップ2: 見つかったホテルが少なければ大人2名でも検索
+    let hotels2 = [];
+    const found1Ids = new Set();
+    hotels1.forEach(h => {
+      const no = String(h.hotel[0].hotelBasicInfo.hotelNo);
+      found1Ids.add(no);
+    });
+
+    if (found1Ids.size < COMPETITOR_HOTELS.length) {
+      await sleep(1100);
+      hotels2 = await fetchAllPages(2);
+      console.log(`[competitorPricing] adultNum=2 found ${hotels2.length} hotel entries`);
     }
-  } else {
-    // 楽天API接続処理（一括検索方式）
-    const accessKey = process.env.RAKUTEN_ACCESS_KEY || '';
-    const affiliateId = process.env.RAKUTEN_AFFILIATE_ID || '';
-    const apiEndpoint = `https://openapi.rakuten.co.jp/engine/api/Travel/VacantHotelSearch/20170426`;
-    const hotelNos = COMPETITOR_HOTELS.map(h => h.rakutenId).join(',');
 
-    const fetchFromRakuten = async (adultNum) => {
-      let url = `${apiEndpoint}?applicationId=${appId}&accessKey=${accessKey}&format=json&checkinDate=${checkinDateStr}&checkoutDate=${checkoutDateStr}&adultNum=${adultNum}&searchPattern=1&hits=30&hotelNo=${hotelNos}`;
-      if (affiliateId) {
-        url += `&affiliateId=${affiliateId}`;
-      }
-      
-      console.log(`[Rakuten API Request] Batch call for ${adultNum} guest(s)`);
-      const response = await fetch(url, {
-        headers: {
-          'Referer': 'https://nasumid-p.netlify.app/',
-          'Origin': 'https://nasumid-p.netlify.app'
+    // ステップ3: 結果をマージして各ホテルの最安値を決定
+    for (const hotel of COMPETITOR_HOTELS) {
+      // 1名検索の結果からこのホテルのプランを集める
+      const plans1 = [];
+      hotels1.forEach(h => {
+        const info = h.hotel[0].hotelBasicInfo;
+        if (String(info.hotelNo) === String(hotel.rakutenId)) {
+          h.hotel.forEach(el => {
+            if (el.roomInfo) {
+              const dailyChargeContainer = el.roomInfo.find(innerEl => innerEl.dailyCharge);
+              // 赤沢温泉と同じく dailyCharge.total を使う
+              const price = dailyChargeContainer && dailyChargeContainer.dailyCharge
+                ? (dailyChargeContainer.dailyCharge.total || dailyChargeContainer.dailyCharge.rakutenCharge || 0)
+                : 0;
+              if (price > 0) {
+                plans1.push(price);
+              }
+            }
+          });
         }
       });
-      return response;
-    };
 
-    try {
-      // 1. まず大人1名で一括検索を試みる
-      let response1 = await fetchFromRakuten(1);
-      let data1 = null;
-      let availableCount1 = 0;
-
-      if (response1.ok) {
-        data1 = await response1.json();
-        availableCount1 = data1.hotels ? data1.hotels.length : 0;
-      } else if (response1.status !== 404) {
-        let errText = '';
-        try { errText = await response1.text(); } catch(e) {}
-        throw new Error(`API error status ${response1.status}: ${errText}`);
-      }
-
-      // 2. 1名検索で引っかかったホテルが極めて少ない（または0）の場合、大人2名でフォールバック検索を行う
-      // ※特に旅館や土曜日などでは1名利用プランが全くない場合が多いため
-      let data2 = null;
-      if (availableCount1 === 0 || (availableCount1 < COMPETITOR_HOTELS.length / 2)) {
-        await sleep(1100); // 429回避用のウェイト
-        try {
-          let response2 = await fetchFromRakuten(2);
-          if (response2.ok) {
-            data2 = await response2.json();
-            console.log(`[Rakuten API] Fallback to 2 guests search found ${data2.hotels ? data2.hotels.length : 0} hotels`);
-          }
-        } catch (err2) {
-          console.warn("Fallback 2-guest search failed:", err2.message);
-        }
-      }
-
-      // 3. 両方の結果をマージして各ホテルのステータスと価格を決定する
-      for (const hotel of COMPETITOR_HOTELS) {
-        const found1 = data1 && data1.hotels ? data1.hotels.find(h => String(h.hotel[0].hotelBasicInfo.hotelNo) === String(hotel.rakutenId)) : null;
-        const found2 = data2 && data2.hotels ? data2.hotels.find(h => String(h.hotel[0].hotelBasicInfo.hotelNo) === String(hotel.rakutenId)) : null;
-
-        if (found1) {
-          const { price, vacantCount } = parseHotelPrice(found1);
-          results.push({
-            id: hotel.id,
-            name: hotel.name,
-            rakutenId: hotel.rakutenId,
-            url: hotel.url,
-            status: 'available',
-            vacantCount,
-            price
-          });
-        } else if (found2) {
-          const { price, vacantCount } = parseHotelPrice(found2);
-          results.push({
-            id: hotel.id,
-            name: hotel.name,
-            rakutenId: hotel.rakutenId,
-            url: hotel.url,
-            status: 'available',
-            vacantCount,
-            price: price ? Math.round(price / 2) : null // 2名合計の半額
-          });
-        } else {
-          results.push({
-            id: hotel.id,
-            name: hotel.name,
-            rakutenId: hotel.rakutenId,
-            url: hotel.url,
-            status: 'unavailable',
-            vacantCount: 0,
-            price: null
+      // 2名検索の結果からこのホテルのプランを集める
+      const plans2 = [];
+      hotels2.forEach(h => {
+        const info = h.hotel[0].hotelBasicInfo;
+        if (String(info.hotelNo) === String(hotel.rakutenId)) {
+          h.hotel.forEach(el => {
+            if (el.roomInfo) {
+              const dailyChargeContainer = el.roomInfo.find(innerEl => innerEl.dailyCharge);
+              const price = dailyChargeContainer && dailyChargeContainer.dailyCharge
+                ? (dailyChargeContainer.dailyCharge.total || dailyChargeContainer.dailyCharge.rakutenCharge || 0)
+                : 0;
+              if (price > 0) {
+                plans2.push(price);
+              }
+            }
           });
         }
-      }
+      });
 
-    } catch (err) {
-      console.error("Rakuten API batch process failed:", err.message);
-      for (const hotel of COMPETITOR_HOTELS) {
+      if (plans1.length > 0) {
+        // 1名利用で空室あり → そのまま最安値を表示
         results.push({
           id: hotel.id,
           name: hotel.name,
           rakutenId: hotel.rakutenId,
           url: hotel.url,
-          status: 'unknown',
+          status: 'available',
+          vacantCount: plans1.length,
+          price: Math.min(...plans1)
+        });
+      } else if (plans2.length > 0) {
+        // 2名利用で空室あり → 合計金額の半額を1人あたり料金として表示
+        results.push({
+          id: hotel.id,
+          name: hotel.name,
+          rakutenId: hotel.rakutenId,
+          url: hotel.url,
+          status: 'available',
+          vacantCount: plans2.length,
+          price: Math.round(Math.min(...plans2) / 2)
+        });
+      } else {
+        // どちらでも見つからない → 本当に満室
+        results.push({
+          id: hotel.id,
+          name: hotel.name,
+          rakutenId: hotel.rakutenId,
+          url: hotel.url,
+          status: 'unavailable',
           vacantCount: 0,
-          price: null,
-          errorMessage: err.message
+          price: null
         });
       }
+    }
+  } catch (err) {
+    console.error('[competitorPricing] Fatal error:', err.message);
+    for (const hotel of COMPETITOR_HOTELS) {
+      results.push({
+        id: hotel.id,
+        name: hotel.name,
+        rakutenId: hotel.rakutenId,
+        url: hotel.url,
+        status: 'unknown',
+        vacantCount: 0,
+        price: null,
+        errorMessage: err.message
+      });
     }
   }
 
@@ -230,7 +231,7 @@ exports.handler = async function(event, context) {
     },
     body: JSON.stringify({
       date: checkinDateStr,
-      isDemoMode,
+      isDemoMode: false,
       results
     })
   };
