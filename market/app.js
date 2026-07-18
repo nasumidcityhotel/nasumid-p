@@ -284,6 +284,7 @@ async function getMarketResearchData(dateStr) {
       guests: 1,
       rooms: 1,
       status: resStatus,
+      url: apiRes ? apiRes.url : null,
       errorMessage: apiRes ? apiRes.errorMessage : null,
       lowestPrice: lowestPrice,
       previousPrice: previousPrice,
