@@ -284,6 +284,7 @@ async function getMarketResearchData(dateStr) {
       guests: 1,
       rooms: 1,
       status: resStatus,
+      errorMessage: apiRes ? apiRes.errorMessage : null,
       lowestPrice: lowestPrice,
       previousPrice: previousPrice,
       priceDifference: priceDifference,
@@ -551,7 +552,12 @@ function renderMarketMetricContent() {
           let statusBadge = '';
           if (h.status === 'available') statusBadge = '<span style="color:#16a34a; font-weight:bold;">予約可能</span>';
           else if (h.status === 'unavailable') statusBadge = '<span style="color:#dc2626; font-weight:bold;">予約不可</span>';
-          else statusBadge = '<span style="color:#64748b;">未確認</span>';
+          else {
+            statusBadge = '<span style="color:#64748b;">未確認</span>';
+            if (h.errorMessage) {
+              statusBadge += `<br><span style="color:#dc2626; font-size:10px; display:block; margin-top:2px;">(エラー: ${h.errorMessage})</span>`;
+            }
+          }
 
           let priceStr = '予約不可';
           let diffBadge = '';
