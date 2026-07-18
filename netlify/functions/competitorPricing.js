@@ -95,10 +95,16 @@ exports.handler = async function(event, context) {
         url += `&affiliateId=${affiliateId}`;
       }
 
+      console.log(`[Rakuten API Request] Calling for ${hotel.name}`);
+      console.log(`- appId: ${appId ? appId.substring(0, 8) + '...' : 'MISSING'}`);
+      console.log(`- accessKey: ${accessKey ? accessKey.substring(0, 8) + '...' : 'MISSING'}`);
+      console.log(`- affiliateId: ${affiliateId ? affiliateId.substring(0, 8) + '...' : 'MISSING'}`);
+
       try {
         const response = await fetch(url, {
           headers: {
-            'Referer': 'https://nasumid-p.netlify.app/'
+            'Referer': 'https://nasumid-p.netlify.app/',
+            'Origin': 'https://nasumid-p.netlify.app'
           }
         });
         if (!response.ok) {
